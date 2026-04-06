@@ -104,6 +104,9 @@ public struct HomeWorkoutLogView: View {
                                     )
                                     .zIndex(100)
                             }
+                            .onTapGesture {
+                                jumpToToday()
+                            }
                             
                             Spacer()
                             
@@ -123,14 +126,23 @@ public struct HomeWorkoutLogView: View {
                     .background(Theme.Colors.surface)
                     .zIndex(1) 
                     
-                    // SCROLLABLE CONTENT SECTION (Liquid Pager)
-                    TabView(selection: $selectedDate) {
-                        ForEach(generateDateRange(), id: \.self) { date in
-                            DailyLogScrollView(date: date)
-                                .tag(date)
+                    // FIXED HORIZONTAL RAIL + PAGER SECTION
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 8) {
+                            // DateRail is now FIXED HORIZONTALLY relative to moving cards
+                            DateRailView(selectedDate: $selectedDate)
+                                .padding(.top, 4)
+                            
+                            TabView(selection: $selectedDate) {
+                                ForEach(generateDateRange(), id: \.self) { date in
+                                    DailyLogView(date: date)
+                                        .tag(date)
+                                }
+                            }
+                            .tabViewStyle(.page(indexDisplayMode: .never))
+                            .frame(height: geo.size.height * 0.82)
                         }
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
                     .frame(height: geo.size.height * 0.90) 
                 }
             }
@@ -145,10 +157,19 @@ public struct HomeWorkoutLogView: View {
             calendar.date(byAdding: .day, value: offset, to: today)
         }
     }
+    
+    private func jumpToToday() {
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+        
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+            selectedDate = Calendar.current.startOfDay(for: Date())
+        }
+    }
 }
 
-// Subview for individual daily log cards to ensure isolated vertical scrolling
-struct DailyLogScrollView: View {
+// Subview for the daily log content (No ScrollView here to prevent nested conflict)
+struct DailyLogView: View {
     let date: Date
     @EnvironmentObject var dataManager: WorkoutDataManager
     @State private var isExerciseListVisible = true
@@ -173,60 +194,51 @@ struct DailyLogScrollView: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 16) {
-                // Pin the DateRail inside the ScrollView to move with data
-                DateRailView(selectedDate: .constant(date))
-                    .padding(.top, 4)
-                    .disabled(true) // Visual indicator only in this context, or pass a real binding if logic allows
-                
-                VStack(spacing: 16) {
-                    if dailyMuscleParts.isEmpty {
-                        VStack(spacing: 12) {
-                            Image(systemName: "cup.and.saucer.fill")
-                                .font(.system(size: 48))
-                                .foregroundColor(dataManager.primaryColor)
-                            Text("REST DAY").font(.system(size: 24, weight: .black, design: .rounded)).foregroundColor(.white)
-                            Text("Recovery is where the growth happens.").font(Typography.bodySmall).foregroundColor(Theme.Colors.onSurfaceVariant).multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity).frame(height: 300)
-                        .background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 32)).padding(.horizontal, 24).padding(.top, 8)
-                    } else {
-                        Button(action: {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { isExerciseListVisible.toggle() }
-                        }) {
-                            VStack(alignment: .leading, spacing: 20) {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("TODAY'S FOCUS").technicalMicroCopy().foregroundColor(dataManager.primaryColor.opacity(0.8))
-                                        Text(dailyMuscleParts.map({ $0.name }).joined(separator: " & ").uppercased()).font(.system(size: 32, weight: .black, design: .rounded)).foregroundColor(.white).fixedSize(horizontal: false, vertical: true)
-                                    }
-                                    Spacer()
-                                    Image(systemName: isExerciseListVisible ? "chevron.up.circle.fill" : "chevron.down.circle.fill").font(.system(size: 32)).foregroundColor(dataManager.primaryColor)
-                                }
-                                HStack(spacing: 8) {
-                                    Label("\(dailyWorkouts.count) EXERCISES", systemImage: "dumbbell.fill")
-                                    Text("•")
-                                    Label("45 MINS", systemImage: "clock.fill")
-                                }.font(Typography.labelSmall).foregroundColor(Theme.Colors.onSurfaceVariant)
-                            }
-                            .padding(32).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(ZStack { Theme.Colors.surfaceContainerHigh; LinearGradient(colors: [dataManager.primaryColor.opacity(0.05), .clear], startPoint: .topLeading, endPoint: .bottomTrailing) })
-                            .clipShape(RoundedRectangle(cornerRadius: 32)).ghostBorder(radius: 32).shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-                        }
-                        .buttonStyle(PlainButtonStyle()).padding(.horizontal, 24).padding(.top, 8)
-                        
-                        if isExerciseListVisible {
-                            VStack(spacing: 12) {
-                                ForEach(dailyWorkouts, id: \.name) { workout in
-                                    WorkoutLogCard(exerciseName: workout.name, sets: workout.sets)
-                                }
-                            }.padding(.top, 8)
-                        }
-                    }
+        VStack(spacing: 16) {
+            if dailyMuscleParts.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "cup.and.saucer.fill")
+                        .font(.system(size: 48))
+                        .foregroundColor(dataManager.primaryColor)
+                    Text("REST DAY").font(.system(size: 24, weight: .black, design: .rounded)).foregroundColor(.white)
+                    Text("Recovery is where the growth happens.").font(Typography.bodySmall).foregroundColor(Theme.Colors.onSurfaceVariant).multilineTextAlignment(.center)
                 }
-                Spacer(minLength: 140)
+                .frame(maxWidth: .infinity).frame(height: 300)
+                .background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 32)).padding(.horizontal, 24).padding(.top, 8)
+            } else {
+                Button(action: {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { isExerciseListVisible.toggle() }
+                }) {
+                    VStack(alignment: .leading, spacing: 20) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("TODAY'S FOCUS").technicalMicroCopy().foregroundColor(dataManager.primaryColor.opacity(0.8))
+                                Text(dailyMuscleParts.map({ $0.name }).joined(separator: " & ").uppercased()).font(.system(size: 32, weight: .black, design: .rounded)).foregroundColor(.white).fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            Image(systemName: isExerciseListVisible ? "chevron.up.circle.fill" : "chevron.down.circle.fill").font(.system(size: 32)).foregroundColor(dataManager.primaryColor)
+                        }
+                        HStack(spacing: 8) {
+                            Label("\(dailyWorkouts.count) EXERCISES", systemImage: "dumbbell.fill")
+                            Text("•")
+                            Label("45 MINS", systemImage: "clock.fill")
+                        }.font(Typography.labelSmall).foregroundColor(Theme.Colors.onSurfaceVariant)
+                    }
+                    .padding(32).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(ZStack { Theme.Colors.surfaceContainerHigh; LinearGradient(colors: [dataManager.primaryColor.opacity(0.05), .clear], startPoint: .topLeading, endPoint: .bottomTrailing) })
+                    .clipShape(RoundedRectangle(cornerRadius: 32)).ghostBorder(radius: 32).shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+                }
+                .buttonStyle(PlainButtonStyle()).padding(.horizontal, 24).padding(.top, 8)
+                
+                if isExerciseListVisible {
+                    VStack(spacing: 12) {
+                        ForEach(dailyWorkouts, id: \.name) { workout in
+                            WorkoutLogCard(exerciseName: workout.name, sets: workout.sets)
+                        }
+                    }.padding(.top, 8)
+                }
             }
+            Spacer(minLength: 140)
         }
     }
 }

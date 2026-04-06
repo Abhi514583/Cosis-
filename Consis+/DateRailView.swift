@@ -3,84 +3,117 @@ import SwiftUI
 public struct DateRailView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @Binding var selectedDate: Date
-    private let weeks: [[Date]]
     
-    public init(selectedDate: Binding<Date>) {
-        self._selectedDate = selectedDate
-        
-        // Find the start of the current week (Monday)
-        let calendar = Calendar.current
+    // Generate fixed Sunday-Saturday weeks
+    private let weeks: [[Date]] = {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 1 // Sunday
         let today = calendar.startOfDay(for: Date())
-        let currentWeekday = calendar.component(.weekday, from: today)
-        let daysToMonday = (currentWeekday == 1 ? -6 : 2 - currentWeekday)
-        let thisMonday = calendar.date(byAdding: .day, value: daysToMonday, to: today)!
         
-        var generatedWeeks: [[Date]] = []
-        // Generate 8 weeks back and 8 weeks forward (~60 days each way)
-        for weekOffset in -8...8 {
-            let weekStart = calendar.date(byAdding: .day, value: weekOffset * 7, to: thisMonday)!
-            let weekDays = (0..<7).compactMap { dayOffset in
-                calendar.date(byAdding: .day, value: dayOffset, to: weekStart)
-            }
-            generatedWeeks.append(weekDays)
+        // Find the Sunday of THIS week
+        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)
+        let startOfThisWeek = calendar.date(from: components) ?? today
+        
+        return (-8...8).map { weekOffset in
+            let weekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: startOfThisWeek)!
+            return (0...6).map { calendar.date(byAdding: .day, value: $0, to: weekStart)! }
         }
-        self.weeks = generatedWeeks
-    }
+    }()
     
-    @State private var visibleWeekIndex: Int? = 8 // Default to today's week (center of range)
+    @State private var visibleWeekIndex: Int?
     
     public var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: 0) {
-                ForEach(0..<weeks.count, id: \.self) { weekIndex in
-                    HStack(spacing: 8) {
-                        ForEach(weeks[weekIndex], id: \.self) { date in
-                            let isSelected = Calendar.current.isDate(date, inSameDayAs: selectedDate)
-                            
-                            Button(action: {
-                                let generator = UIImpactFeedbackGenerator(style: .light)
-                                generator.impactOccurred()
-                                
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    selectedDate = date
+        VStack(spacing: 0) {
+            // 7-DAY RAIL (Horizontally Stationary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
+                    ForEach(0..<weeks.count, id: \.self) { weekIndex in
+                        HStack(spacing: 12) {
+                            ForEach(weeks[weekIndex], id: \.self) { date in
+                                DayButton(date: date, isSelected: Calendar.current.isDate(date, inSameDayAs: selectedDate)) {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        selectedDate = date
+                                    }
                                 }
-                            }) {
-                                VStack(spacing: 2) {
-                                    Text(date.formatted(.dateTime.day()))
-                                        .font(.system(size: 20, weight: .black))
-                                        .foregroundColor(isSelected ? .white : Theme.Colors.onSurfaceVariant.opacity(0.5))
-                                    
-                                    Text(date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(isSelected ? dataManager.primaryColor : Theme.Colors.onSurfaceVariant.opacity(0.5))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 56) // Aggressively shorter
-                                .background(isSelected ? Theme.Colors.surfaceContainerLow : Color.clear)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
                             }
-                            .buttonStyle(PlainButtonStyle())
+                        }
+                        .padding(.horizontal, 24)
+                        .containerRelativeFrame(.horizontal)
+                        .id(weekIndex)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollPosition(id: $visibleWeekIndex)
+            .scrollTargetBehavior(.paging) 
+            .onChange(of: selectedDate) { _, newDate in
+                // LOG-TO-RAIL SYNC: Move the rail when the log pager crosses a week boundary
+                if let targetWeekIndex = weekIndex(for: newDate), targetWeekIndex != visibleWeekIndex {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                        visibleWeekIndex = targetWeekIndex
+                    }
+                }
+            }
+            .onChange(of: visibleWeekIndex) { old, new in
+                // RAIL-TO-LOG SYNC: PARALLEL DAY SELECTION
+                if let newIndex = new, old != new {
+                    let calendar = Calendar.current
+                    let oldWeek = weeks[old ?? 8]
+                    let newWeek = weeks[newIndex]
+                    
+                    // Find the day-of-week index (0-6) of the current selection
+                    let dayOfWeek = calendar.component(.weekday, from: selectedDate)
+                    
+                    // Find the corresponding day in the new week (1=Sunday, 2=Monday...)
+                    if let parallelDate = newWeek.first(where: { calendar.component(.weekday, from: $0) == dayOfWeek }) {
+                        let generator = UIImpactFeedbackGenerator(style: .light)
+                        generator.impactOccurred()
+                        
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            selectedDate = parallelDate
                         }
                     }
-                    .padding(.horizontal, 24)
-                    .containerRelativeFrame(.horizontal)
-                    .id(weekIndex)
                 }
             }
-            .scrollTargetLayout()
+            .onAppear {
+                if visibleWeekIndex == nil {
+                    visibleWeekIndex = weekIndex(for: selectedDate) ?? 8
+                }
+            }
         }
-        .scrollPosition(id: $visibleWeekIndex)
-        .scrollTargetBehavior(.paging)
-        .onChange(of: visibleWeekIndex) { old, new in
-            if let newIndex = new, old != new {
-                let generator = UIImpactFeedbackGenerator(style: .medium)
-                generator.impactOccurred()
+    }
+    
+    private func weekIndex(for date: Date) -> Int? {
+        let calendar = Calendar.current
+        return weeks.firstIndex(where: { week in
+            week.contains { calendar.isDate($0, inSameDayAs: date) }
+        })
+    }
+}
+
+// Internal component for the day buttons in the rail
+struct DayButton: View {
+    let date: Date
+    let isSelected: Bool
+    let action: () -> Void
+    @EnvironmentObject var dataManager: WorkoutDataManager
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Text(date.formatted(.dateTime.day()))
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundColor(isSelected ? .white : Theme.Colors.onSurfaceVariant.opacity(0.5))
                 
-                // When swiping to a new week, select the first day (Monday) of that week
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    selectedDate = weeks[newIndex][0]
-                }
+                Text(date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(isSelected ? dataManager.primaryColor : Theme.Colors.onSurfaceVariant.opacity(0.5))
             }
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .background(isSelected ? Theme.Colors.surfaceContainerLow : Color.clear)
+            .buttonStyle(PlainButtonStyle())
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
 }
@@ -88,5 +121,5 @@ public struct DateRailView: View {
 #Preview {
     DateRailView(selectedDate: .constant(Date()))
         .background(Theme.Colors.surface)
+        .environmentObject(WorkoutDataManager())
 }
-
