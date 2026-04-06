@@ -1,0 +1,81 @@
+import SwiftUI
+
+public struct WorkoutSet: Identifiable, Hashable {
+    public let id = UUID()
+    public var setNumber: Int
+    public var reps: Int
+    public var weight: Double
+    public var isPR: Bool
+    
+    public init(setNumber: Int, reps: Int, weight: Double, isPR: Bool = false) {
+        self.setNumber = setNumber
+        self.reps = reps
+        self.weight = weight
+        self.isPR = isPR
+    }
+}
+
+public struct WorkoutLogCard: View {
+    public var exerciseName: String
+    public var sets: [WorkoutSet]
+    
+    public init(exerciseName: String, sets: [WorkoutSet]) {
+        self.exerciseName = exerciseName
+        self.sets = sets
+    }
+    
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(exerciseName)
+                .font(Typography.headlineLarge)
+                .foregroundColor(Theme.Colors.onSurface)
+                .padding(.horizontal, 24)
+            
+            VStack(spacing: 8) { // Small gap between cells
+                ForEach(Array(sets.enumerated()), id: \.element.id) { index, workoutSet in
+                    HStack(spacing: 16) {
+                        Text("\(workoutSet.setNumber)")
+                            .font(Typography.labelMedium)
+                            .foregroundColor(Theme.Colors.onSurfaceVariant)
+                            .frame(width: 24, alignment: .leading)
+                        
+                        Text("\(workoutSet.weight, specifier: "%.1f") kg")
+                            .font(Typography.titleLarge)
+                            .foregroundColor(Theme.Colors.onSurface)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        if workoutSet.isPR {
+                            Text("PR")
+                                .font(Typography.labelSmall)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Theme.Colors.secondaryContainer)
+                                .foregroundColor(Theme.Colors.onSurface)
+                                .clipShape(Capsule())
+                        }
+                        
+                        Text("\(workoutSet.reps) reps")
+                            .font(Typography.titleMedium)
+                            .foregroundColor(Theme.Colors.primary) // Red focus
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 16)
+                    // Zebra striping - No lines allowed!
+                    .background(index % 2 == 0 ? Theme.Colors.surfaceContainerLow : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+            }
+            .padding(.horizontal, 8)
+        }
+        .padding(.vertical, 16)
+    }
+}
+
+#Preview {
+    WorkoutLogCard(exerciseName: "Barbell Bench Press", sets: [
+        WorkoutSet(setNumber: 1, reps: 8, weight: 60),
+        WorkoutSet(setNumber: 2, reps: 6, weight: 70),
+        WorkoutSet(setNumber: 3, reps: 5, weight: 75, isPR: true)
+    ])
+    .background(Theme.Colors.surface)
+}
