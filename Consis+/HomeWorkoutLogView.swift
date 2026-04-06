@@ -172,7 +172,7 @@ public struct HomeWorkoutLogView: View {
 struct DailyLogView: View {
     let date: Date
     @EnvironmentObject var dataManager: WorkoutDataManager
-    @State private var isExerciseListVisible = true
+    @State private var isExerciseListVisible = false
     
     // Computed daily stats
     private var dailyMuscleParts: [MusclePart] {

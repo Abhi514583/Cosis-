@@ -28,7 +28,7 @@ public struct DateRailView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 0) {
                     ForEach(0..<weeks.count, id: \.self) { weekIndex in
-                        HStack(spacing: 12) {
+                        HStack(spacing: 12) { // Adjusted for tighter fit: 12 is the sweet spot
                             ForEach(weeks[weekIndex], id: \.self) { date in
                                 DayButton(date: date, isSelected: Calendar.current.isDate(date, inSameDayAs: selectedDate)) {
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -58,7 +58,6 @@ public struct DateRailView: View {
                 // RAIL-TO-LOG SYNC: PARALLEL DAY SELECTION
                 if let newIndex = new, old != new {
                     let calendar = Calendar.current
-                    let oldWeek = weeks[old ?? 8]
                     let newWeek = weeks[newIndex]
                     
                     // Find the day-of-week index (0-6) of the current selection
@@ -100,21 +99,29 @@ struct DayButton: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 2) {
+            VStack(spacing: 4) {
                 Text(date.formatted(.dateTime.day()))
-                    .font(.system(size: 20, weight: .black))
-                    .foregroundColor(isSelected ? .white : Theme.Colors.onSurfaceVariant.opacity(0.5))
+                    .font(.system(size: 24, weight: .black))
+                    .foregroundColor(isSelected ? .white : Theme.Colors.onSurfaceVariant.opacity(0.4))
                 
                 Text(date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(isSelected ? dataManager.primaryColor : Theme.Colors.onSurfaceVariant.opacity(0.5))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(isSelected ? dataManager.primaryColor : Theme.Colors.onSurfaceVariant.opacity(0.4))
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
+            .frame(width: 48, height: 72) // Slightly narrower to fit better
             .background(isSelected ? Theme.Colors.surfaceContainerLow : Color.clear)
-            .buttonStyle(PlainButtonStyle())
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
         }
+        .buttonStyle(ScaleButtonStyle())
+    }
+}
+
+// Subtle scale effect on tap
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
+            .animation(.interactiveSpring(), value: configuration.isPressed)
     }
 }
 
