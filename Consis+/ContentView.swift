@@ -5,6 +5,7 @@ struct ContentView: View {
     @StateObject private var dataManager = WorkoutDataManager()
     @State private var selectedTab = 0
     @State private var isPlusMenuOpen = false
+    @State private var selectedDate = Date()
     @State private var isBuildingRoutine = false
     @State private var isStartingWorkout = false
     @State private var isSettingsOpen = false
@@ -16,11 +17,11 @@ struct ContentView: View {
             Group {
                 switch selectedTab {
                 case 0:
-                    HomeWorkoutLogView()
+                    HomeWorkoutLogView(selectedDate: $selectedDate)
                 case 1:
                     AnalyticsView()
                 default:
-                    HomeWorkoutLogView()
+                    HomeWorkoutLogView(selectedDate: $selectedDate)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -55,7 +56,7 @@ struct ContentView: View {
                 .zIndex(5)
             }
             
-            BottomFloatingNav(selectedTab: $selectedTab, isPlusMenuOpen: $isPlusMenuOpen)
+            BottomFloatingNav(selectedTab: $selectedTab, isPlusMenuOpen: $isPlusMenuOpen, selectedDate: $selectedDate)
         }
         .environmentObject(dataManager)
         .fullScreenCover(isPresented: $isBuildingRoutine) {

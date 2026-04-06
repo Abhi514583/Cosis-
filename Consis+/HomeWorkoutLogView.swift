@@ -2,7 +2,7 @@ import SwiftUI
 
 public struct HomeWorkoutLogView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
-    @State private var selectedDate = Date()
+    @Binding var selectedDate: Date
     @State private var dotOffset: CGSize = .zero
     
     public var body: some View {
@@ -178,5 +178,6 @@ struct DailyLogView: View {
 }
 
 #Preview {
-    HomeWorkoutLogView()
+    HomeWorkoutLogView(selectedDate: .constant(Date()))
+        .environmentObject(WorkoutDataManager())
 }
