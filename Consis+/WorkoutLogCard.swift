@@ -1,20 +1,5 @@
 import SwiftUI
 
-public struct WorkoutSet: Identifiable, Hashable {
-    public let id = UUID()
-    public var setNumber: Int
-    public var reps: Int
-    public var weight: Double
-    public var isPR: Bool
-    
-    public init(setNumber: Int, reps: Int, weight: Double, isPR: Bool = false) {
-        self.setNumber = setNumber
-        self.reps = reps
-        self.weight = weight
-        self.isPR = isPR
-    }
-}
-
 public struct WorkoutLogCard: View {
     public var exerciseName: String
     public var sets: [WorkoutSet]

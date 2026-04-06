@@ -64,16 +64,8 @@ struct ContentView: View {
                 .environmentObject(dataManager)
         }
         .fullScreenCover(isPresented: $isStartingWorkout) {
-            // Placeholder for Start Workout
-            ZStack {
-                Theme.Colors.surface.ignoresSafeArea()
-                VStack {
-                    Text("Starting Workout...")
-                        .font(Typography.headlineLarge)
-                    Button("Close") { isStartingWorkout = false }
-                        .padding()
-                }
-            }
+            WorkoutSessionView()
+                .environmentObject(dataManager)
         }
         .sheet(isPresented: $isSettingsOpen) {
             SettingsView()
