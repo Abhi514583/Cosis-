@@ -12,15 +12,15 @@ public enum Theme {
         public static let surfaceContainerHighest = Color(hex: "#353535")
         public static let surfaceDim = Color(hex: "#131313")
         
-        public static let primary = Color(hex: "#ffb4aa")
-        public static let primaryContainer = Color(hex: "#ff5545")
-        public static let onPrimaryContainer = Color(hex: "#5c0002")
+        public static let primary = Color(hex: "#C4524D")
+        public static let primaryContainer = Color(hex: "#A03A36")
+        public static let onPrimaryContainer = Color(hex: "#FFFFFF")
         
-        public static let secondaryContainer = Color(hex: "#454747")
-        public static let outlineVariant = Color(hex: "#5d3f3b")
+        public static let secondaryContainer = Color(hex: "#2A2A2A")
+        public static let outlineVariant = Color(hex: "#4A2A28")
         
         public static let onSurface = Color(hex: "#e2e2e2")
-        public static let onSurfaceVariant = Color(hex: "#e7bdb7")
+        public static let onSurfaceVariant = Color(hex: "#DDA09E")
         public static let error = Color(hex: "#FF453A")
     }
 }

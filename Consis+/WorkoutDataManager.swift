@@ -23,8 +23,8 @@ public class WorkoutDataManager: ObservableObject {
     ]
     
     // Theme Customization
-    @Published public var primaryColor: Color = Color(hex: "#ffb4aa") // Default Peach
-    @Published public var accentColor: Color = Color.cyan // Default Blue/Cyan
+    @Published public var primaryColor: Color = Color(hex: "#C4524D") // Crimson
+    @Published public var accentColor: Color = Color(hex: "#FF2D55") // Glowing Red for Heart
     
     public let availableParts = [
         MusclePart(name: "CHEST", color: Color(hex: "#FF453A"), icon: "shield.fill"),

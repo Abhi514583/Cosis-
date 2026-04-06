@@ -82,12 +82,12 @@ public struct HomeWorkoutLogView: View {
                                     .foregroundColor(.white)
                                     .contentTransition(.numericText(value: selectedDate.timeIntervalSince1970))
                                 
-                                // Glowing Dynamic Accent Dot
-                                Circle()
-                                    .fill(dataManager.accentColor)
-                                    .frame(width: 14, height: 14)
-                                    .shadow(color: dataManager.accentColor.opacity(0.8), radius: 8, x: 0, y: 0)
-                                    .shadow(color: dataManager.accentColor.opacity(0.4), radius: 16, x: 0, y: 0)
+                                // Glowing Dynamic Accent Heart
+                                Image(systemName: "heart.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(dataManager.accentColor)
+                                    .shadow(color: dataManager.accentColor.opacity(0.8), radius: 12, x: 0, y: 0)
+                                    .shadow(color: dataManager.accentColor.opacity(0.4), radius: 20, x: 0, y: 0)
                                     .offset(x: dotOffset.width, y: 8 + dotOffset.height) 
                                     .gesture(
                                         DragGesture()

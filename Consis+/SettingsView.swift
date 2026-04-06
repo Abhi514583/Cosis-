@@ -34,10 +34,10 @@ struct SettingsView: View {
                         .background(Theme.Colors.surfaceContainerHigh)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                         
-                        // Accent/Dot Color Picker
+                        // Accent/Heart Color Picker
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("System Dot")
+                                Text("System Heart")
                                     .font(.system(size: 16, weight: .bold, design: .rounded))
                                 Text("Used for status and activity indicators")
                                     .font(.system(size: 12))
@@ -60,10 +60,10 @@ struct SettingsView: View {
                             .foregroundColor(Theme.Colors.onSurfaceVariant)
                         
                         HStack(spacing: 12) {
-                            Circle()
-                                .fill(dataManager.accentColor)
-                                .frame(width: 12, height: 12)
-                                .shadow(color: dataManager.accentColor.opacity(0.5), radius: 4)
+                            Image(systemName: "heart.fill")
+                                .foregroundColor(dataManager.accentColor)
+                                .font(.system(size: 14))
+                                .shadow(color: dataManager.accentColor.opacity(0.8), radius: 8)
                             
                             Text("Kinetic Monolith")
                                 .font(.system(size: 18, weight: .black, design: .rounded))
