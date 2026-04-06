@@ -1,25 +1,33 @@
 import SwiftUI
 
 public struct DateRailView: View {
+    @EnvironmentObject var dataManager: WorkoutDataManager
     @Binding var selectedDate: Date
     private let weeks: [[Date]]
     
     public init(selectedDate: Binding<Date>) {
         self._selectedDate = selectedDate
         
-        let today = Calendar.current.startOfDay(for: Date())
+        // Find the start of the current week (Monday)
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let currentWeekday = calendar.component(.weekday, from: today)
+        let daysToMonday = (currentWeekday == 1 ? -6 : 2 - currentWeekday)
+        let thisMonday = calendar.date(byAdding: .day, value: daysToMonday, to: today)!
+        
         var generatedWeeks: [[Date]] = []
-        for weekOffset in 0..<4 {
-            let weekStart = Calendar.current.date(byAdding: .day, value: weekOffset * 7, to: today)!
+        // Generate 8 weeks back and 8 weeks forward (~60 days each way)
+        for weekOffset in -8...8 {
+            let weekStart = calendar.date(byAdding: .day, value: weekOffset * 7, to: thisMonday)!
             let weekDays = (0..<7).compactMap { dayOffset in
-                Calendar.current.date(byAdding: .day, value: dayOffset, to: weekStart)
+                calendar.date(byAdding: .day, value: dayOffset, to: weekStart)
             }
             generatedWeeks.append(weekDays)
         }
         self.weeks = generatedWeeks
     }
     
-    @State private var visibleWeekIndex: Int? = 0
+    @State private var visibleWeekIndex: Int? = 8 // Default to today's week (center of range)
     
     public var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -44,7 +52,7 @@ public struct DateRailView: View {
                                     
                                     Text(date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
                                         .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(isSelected ? Theme.Colors.primary : Theme.Colors.onSurfaceVariant.opacity(0.5))
+                                        .foregroundColor(isSelected ? dataManager.primaryColor : Theme.Colors.onSurfaceVariant.opacity(0.5))
                                 }
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 56) // Aggressively shorter
@@ -64,7 +72,7 @@ public struct DateRailView: View {
         .scrollPosition(id: $visibleWeekIndex)
         .scrollTargetBehavior(.paging)
         .onChange(of: visibleWeekIndex) { old, new in
-            if new != nil {
+            if new != nil && old != new {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
             }

@@ -1,32 +1,9 @@
 import SwiftUI
 
-struct MusclePart: Identifiable, Hashable {
-    let id = UUID()
-    let name: String
-    let color: Color
-    let icon: String
-}
-
 public struct BuildRoutineView: View {
     @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: WorkoutDataManager
     @State private var selectedDay: Int? = 2 // Default to Monday
-    @State private var routine: [Int: [MusclePart]] = [
-        2: [MusclePart(name: "CHEST", color: Color(hex: "#FF453A"), icon: "shield.fill"), 
-            MusclePart(name: "TRICEPS", color: Color(hex: "#0A84FF"), icon: "bolt.fill")],
-        3: [MusclePart(name: "BACK", color: Color(hex: "#30D158"), icon: "figure.walk")],
-        4: [MusclePart(name: "LEGS", color: Color(hex: "#FF9F0A"), icon: "flame.fill")]
-    ]
-    
-    private let availableParts = [
-        MusclePart(name: "CHEST", color: Color(hex: "#FF453A"), icon: "shield.fill"),
-        MusclePart(name: "BACK", color: Color(hex: "#30D158"), icon: "figure.walk"),
-        MusclePart(name: "LEGS", color: Color(hex: "#FF9F0A"), icon: "flame.fill"),
-        MusclePart(name: "SHOULDERS", color: Color(hex: "#BF5AF2"), icon: "crown.fill"),
-        MusclePart(name: "BICEPS", color: Color(hex: "#FF375F"), icon: "dumbbell.fill"),
-        MusclePart(name: "TRICEPS", color: Color(hex: "#0A84FF"), icon: "bolt.fill"),
-        MusclePart(name: "ABS", color: Color(hex: "#64D2FF"), icon: "star.fill"),
-        MusclePart(name: "CARDIO", color: Color(hex: "#32ADE6"), icon: "heart.fill")
-    ]
     
     private let weekdays = [
         (2, "MON"), (3, "TUE"), (4, "WED"), (5, "THU"), (6, "FRI"), (7, "SAT"), (1, "SUN")
@@ -59,7 +36,8 @@ public struct BuildRoutineView: View {
                             DaySelectorChip(
                                 label: dayAbbr,
                                 isSelected: selectedDay == dayNum,
-                                hasContent: !(routine[dayNum]?.isEmpty ?? true)
+                                hasContent: !(dataManager.routine[dayNum]?.isEmpty ?? true),
+                                accentColor: dataManager.accentColor
                             ) {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                     selectedDay = dayNum
@@ -80,9 +58,9 @@ public struct BuildRoutineView: View {
                                 .technicalMicroCopy()
                                 .foregroundColor(Theme.Colors.onSurfaceVariant)
                             Spacer()
-                            if !(routine[dayNum]?.isEmpty ?? true) {
+                            if !(dataManager.routine[dayNum]?.isEmpty ?? true) {
                                 Button(action: {
-                                    withAnimation(.spring()) { routine[dayNum] = [] }
+                                    withAnimation(.spring()) { dataManager.routine[dayNum] = [] }
                                 }) {
                                     Label("CLEAR", systemImage: "trash.fill")
                                         .font(.system(size: 10, weight: .bold))
@@ -92,7 +70,7 @@ public struct BuildRoutineView: View {
                         }
                         .padding(.horizontal, 24)
                         
-                        if let parts = routine[dayNum], !parts.isEmpty {
+                        if let parts = dataManager.routine[dayNum], !parts.isEmpty {
                             HStack(spacing: 8) {
                                 ForEach(parts) { part in
                                     Text(part.name)
@@ -125,8 +103,8 @@ public struct BuildRoutineView: View {
                     
                     ScrollView(.vertical, showsIndicators: false) {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 16) {
-                            ForEach(availableParts) { part in
-                                let isSelected = selectedDay != nil && (routine[selectedDay!]?.contains(where: { $0.name == part.name }) ?? false)
+                            ForEach(dataManager.availableParts) { part in
+                                let isSelected = selectedDay != nil && (dataManager.routine[selectedDay!]?.contains(where: { $0.name == part.name }) ?? false)
                                 
                                 MultiSelectPartCard(part: part, isSelected: isSelected) {
                                     if let day = selectedDay {
@@ -154,9 +132,9 @@ public struct BuildRoutineView: View {
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 20)
-                        .background(Color.cyan)
+                        .background(dataManager.accentColor)
                         .clipShape(Capsule())
-                        .shadow(color: Color.cyan.opacity(0.4), radius: 15, x: 0, y: 8)
+                        .shadow(color: dataManager.accentColor.opacity(0.4), radius: 15, x: 0, y: 8)
                 }
                 .padding(.horizontal, 48)
                 .padding(.bottom, 40)
@@ -168,13 +146,13 @@ public struct BuildRoutineView: View {
         let generator = UISelectionFeedbackGenerator()
         generator.selectionChanged()
         
-        var currentParts = routine[day] ?? []
+        var currentParts = dataManager.routine[day] ?? []
         if let index = currentParts.firstIndex(where: { $0.name == part.name }) {
             currentParts.remove(at: index)
         } else {
             currentParts.append(part)
         }
-        routine[day] = currentParts
+        dataManager.routine[day] = currentParts
     }
 }
 
@@ -182,6 +160,7 @@ struct DaySelectorChip: View {
     let label: String
     let isSelected: Bool
     let hasContent: Bool
+    let accentColor: Color
     let action: () -> Void
     
     var body: some View {
@@ -193,14 +172,14 @@ struct DaySelectorChip: View {
                 
                 if hasContent {
                     Circle()
-                        .fill(isSelected ? .black : Color.cyan)
+                        .fill(isSelected ? .black : accentColor)
                         .frame(width: 4, height: 4)
                 }
             }
             .frame(width: 52, height: 64)
-            .background(isSelected ? Color.cyan : Theme.Colors.surfaceContainerHigh)
+            .background(isSelected ? accentColor : Theme.Colors.surfaceContainerHigh)
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: isSelected ? Color.cyan.opacity(0.3) : .clear, radius: 8)
+            .shadow(color: isSelected ? accentColor.opacity(0.3) : .clear, radius: 8)
         }
     }
 }

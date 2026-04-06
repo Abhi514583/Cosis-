@@ -1,35 +1,19 @@
 import SwiftUI
 
 public struct HomeWorkoutLogView: View {
+    @EnvironmentObject var dataManager: WorkoutDataManager
     @State private var selectedDate = Date()
     @State private var isExerciseListVisible = true
     @State private var dotOffset: CGSize = .zero
     
-    private let pillColors: [Color] = [
-        Color(hex: "#FF453A"), // Red
-        Color(hex: "#0A84FF"), // Blue
-        Color(hex: "#30D158"), // Green
-        Color(hex: "#FF9F0A"), // Orange
-        Color(hex: "#BF5AF2")  // Purple
-    ]
-    
     // Computed properties for dynamic daily stats
-    private var dailyMuscleGroups: [String] {
-        let weekday = Calendar.current.component(.weekday, from: selectedDate)
-        switch weekday {
-        case 1: return [] // Sunday - Rest
-        case 2: return ["Chest", "Triceps", "Shoulders"] // Monday
-        case 3: return ["Back", "Biceps", "Forearms"] // Tuesday
-        case 4: return ["Legs", "Abs"] // Wednesday
-        case 5: return ["Chest", "Back"] // Thursday
-        case 6: return ["Shoulders", "Arms"] // Friday
-        case 7: return ["Legs", "Abs"] // Saturday
-        default: return []
-        }
+    private var dailyMuscleParts: [MusclePart] {
+        dataManager.parts(for: selectedDate)
     }
     
     private var dailyWorkouts: [(name: String, sets: [WorkoutSet])] {
         let weekday = Calendar.current.component(.weekday, from: selectedDate)
+        // For now, keep the mock workout mapping, but we could eventually map parts to exercises
         switch weekday {
         case 2, 5: // Chest days
             return [
@@ -98,12 +82,12 @@ public struct HomeWorkoutLogView: View {
                                     .foregroundColor(.white)
                                     .contentTransition(.numericText(value: selectedDate.timeIntervalSince1970))
                                 
-                                // Glowing Cyan Sky-Blue Interactive Dot
+                                // Glowing Dynamic Accent Dot
                                 Circle()
-                                    .fill(Color.cyan)
+                                    .fill(dataManager.accentColor)
                                     .frame(width: 14, height: 14)
-                                    .shadow(color: Color.cyan.opacity(0.8), radius: 8, x: 0, y: 0)
-                                    .shadow(color: Color.cyan.opacity(0.4), radius: 16, x: 0, y: 0)
+                                    .shadow(color: dataManager.accentColor.opacity(0.8), radius: 8, x: 0, y: 0)
+                                    .shadow(color: dataManager.accentColor.opacity(0.4), radius: 16, x: 0, y: 0)
                                     .offset(x: dotOffset.width, y: 8 + dotOffset.height) 
                                     .gesture(
                                         DragGesture()
@@ -151,13 +135,13 @@ public struct HomeWorkoutLogView: View {
                     // SCROLLABLE CONTENT SECTION (Takes 85%)
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 16) {
-                            if dailyMuscleGroups.isEmpty {
+                            if dailyMuscleParts.isEmpty {
                                 // Rest Day Card
                                 VStack(spacing: 12) {
                                     Image(systemName: "cup.and.saucer.fill")
                                         .font(.system(size: 48))
-                                        .foregroundColor(Theme.Colors.primary)
-                                        .shadow(color: Theme.Colors.primary.opacity(0.3), radius: 20)
+                                        .foregroundColor(dataManager.primaryColor)
+                                        .shadow(color: dataManager.primaryColor.opacity(0.3), radius: 20)
                                     
                                     Text("REST DAY")
                                         .font(.system(size: 24, weight: .black, design: .rounded))
@@ -188,9 +172,9 @@ public struct HomeWorkoutLogView: View {
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text("TODAY'S FOCUS")
                                                     .technicalMicroCopy()
-                                                    .foregroundColor(Theme.Colors.primary.opacity(0.8))
+                                                    .foregroundColor(dataManager.primaryColor.opacity(0.8))
                                                 
-                                                Text(dailyMuscleGroups.joined(separator: " & ").uppercased())
+                                                Text(dailyMuscleParts.map({ $0.name }).joined(separator: " & ").uppercased())
                                                     .font(.system(size: 32, weight: .black, design: .rounded))
                                                     .foregroundColor(.white)
                                                     .fixedSize(horizontal: false, vertical: true)
@@ -198,7 +182,7 @@ public struct HomeWorkoutLogView: View {
                                             Spacer()
                                             Image(systemName: isExerciseListVisible ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
                                                 .font(.system(size: 32))
-                                                .foregroundColor(Theme.Colors.primary)
+                                                .foregroundColor(dataManager.primaryColor)
                                         }
                                         
                                         HStack(spacing: 8) {
@@ -211,13 +195,13 @@ public struct HomeWorkoutLogView: View {
                                         
                                         // Preview Pills inside card
                                         HStack(spacing: 8) {
-                                            ForEach(Array(dailyMuscleGroups.prefix(3).enumerated()), id: \.offset) { index, group in
-                                                Text(group)
+                                            ForEach(dailyMuscleParts.prefix(3)) { part in
+                                                Text(part.name)
                                                     .font(.system(size: 10, weight: .bold))
                                                     .padding(.horizontal, 10)
                                                     .padding(.vertical, 4)
-                                                    .background(Theme.Colors.primary.opacity(0.1))
-                                                    .foregroundColor(Theme.Colors.primary)
+                                                    .background(part.color.opacity(0.1))
+                                                    .foregroundColor(part.color)
                                                     .clipShape(Capsule())
                                             }
                                         }
@@ -228,7 +212,7 @@ public struct HomeWorkoutLogView: View {
                                         ZStack {
                                             Theme.Colors.surfaceContainerHigh
                                             // Subtle gradient highlight
-                                            LinearGradient(colors: [Theme.Colors.primary.opacity(0.05), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                            LinearGradient(colors: [dataManager.primaryColor.opacity(0.05), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
                                         }
                                     )
                                     .clipShape(RoundedRectangle(cornerRadius: 32))

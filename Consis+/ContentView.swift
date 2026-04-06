@@ -2,10 +2,12 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    @StateObject private var dataManager = WorkoutDataManager()
     @State private var selectedTab = 0
     @State private var isPlusMenuOpen = false
     @State private var isBuildingRoutine = false
     @State private var isStartingWorkout = false
+    @State private var isSettingsOpen = false
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -32,13 +34,18 @@ struct ContentView: View {
                     }
                 
                 VStack(spacing: 20) {
-                    PlusMenuItem(title: "Start Workout", icon: "play.fill", color: Color.cyan) {
+                    PlusMenuItem(title: "Start Workout", icon: "play.fill", color: dataManager.accentColor) {
                         isStartingWorkout = true
                         isPlusMenuOpen = false
                     }
                     
-                    PlusMenuItem(title: "Build Routine", icon: "hammer.fill", color: Theme.Colors.primary) {
+                    PlusMenuItem(title: "Build Routine", icon: "hammer.fill", color: dataManager.primaryColor) {
                         isBuildingRoutine = true
+                        isPlusMenuOpen = false
+                    }
+                    
+                    PlusMenuItem(title: "Settings", icon: "gearshape.fill", color: .gray) {
+                        isSettingsOpen = true
                         isPlusMenuOpen = false
                     }
                     
@@ -50,8 +57,10 @@ struct ContentView: View {
             
             BottomFloatingNav(selectedTab: $selectedTab, isPlusMenuOpen: $isPlusMenuOpen)
         }
+        .environmentObject(dataManager)
         .fullScreenCover(isPresented: $isBuildingRoutine) {
             BuildRoutineView()
+                .environmentObject(dataManager)
         }
         .fullScreenCover(isPresented: $isStartingWorkout) {
             // Placeholder for Start Workout
@@ -64,6 +73,10 @@ struct ContentView: View {
                         .padding()
                 }
             }
+        }
+        .sheet(isPresented: $isSettingsOpen) {
+            SettingsView()
+                .environmentObject(dataManager)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .preferredColorScheme(.dark)
