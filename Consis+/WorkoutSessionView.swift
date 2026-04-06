@@ -4,391 +4,347 @@ public struct WorkoutSessionView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var dataManager: WorkoutDataManager
     
-    // Flow State: 0 = Muscles, 1 = Exercises, 2 = Active Logger
-    @State private var sessionStep: Int = 0
-    @State private var selectedMuscleParts: Set<String> = []
-    @State private var selectedExercises: Set<Exercise> = []
+    enum SessionPhase {
+        case overview
+        case selection
+        case logging(Exercise)
+    }
     
-    // Active Session State
-    @State private var activeLog: [ExerciseLog] = []
-    
-    private let activeGreen = Color(hex: "#30D158")
+    @State private var phase: SessionPhase = .overview
     
     public var body: some View {
         ZStack {
             Theme.Colors.surface.ignoresSafeArea()
             
-            VStack(spacing: 0) {
-                // Header (Dynamic based on step)
-                HeaderView(step: sessionStep, onDismiss: { dismiss() }, onBack: {
-                    withAnimation(.spring()) { sessionStep -= 1 }
-                })
-                
-                Group {
-                    switch sessionStep {
-                    case 0:
-                        MuscleSelectionView(
-                            selectedParts: $selectedMuscleParts,
-                            availableParts: dataManager.availableParts,
-                            onNext: { withAnimation(.spring()) { sessionStep = 1 } }
-                        )
-                    case 1:
-                        ExerciseSelectionView(
-                            muscleParts: selectedMuscleParts,
-                            selectedExercises: $selectedExercises,
-                            exerciseLibrary: dataManager.exerciseLibrary,
-                            onStart: startWorkout
-                        )
-                    case 2:
-                        ActiveLoggerView(logs: $activeLog, onFinish: finishWorkout)
-                    default:
-                        Text("Unknown Step")
+            switch phase {
+            case .overview:
+                ActiveWorkoutOverviewView(
+                    onAddExercise: { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .selection } },
+                    onFinish: {
+                        dataManager.activeSession = nil
+                        dismiss()
                     }
-                }
-                .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
+                )
+            case .selection:
+                ExerciseSelectionFeedView(
+                    onSelect: { ex in withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .logging(ex) } },
+                    onClose: { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .overview } }
+                )
+            case .logging(let ex):
+                TableLoggerView(
+                    exercise: ex,
+                    onBack: { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .overview } }
+                )
             }
         }
-    }
-    
-    private func startWorkout() {
-        // Initialize the active logs with 1 empty set for each selected exercise
-        activeLog = selectedExercises.map { exercise in
-            ExerciseLog(exercise: exercise, sets: [WorkoutSet(setNumber: 1, reps: 0, weight: 0)])
-        }
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-            sessionStep = 2
-        }
-    }
-    
-    private func finishWorkout() {
-        // In a real app, we'd save this to a database
-        dataManager.activeSession = nil 
-        dismiss()
-    }
-}
-
-// MARK: - Subviews
-
-struct HeaderView: View {
-    let step: Int
-    let onDismiss: () -> Void
-    let onBack: () -> Void
-    
-    var title: String {
-        switch step {
-        case 0: return "CHOOSE MUSCLES"
-        case 1: return "PICK EXERCISES"
-        case 2: return "ACTIVE SESSION"
-        default: return "WORKOUT"
-        }
-    }
-    
-    var body: some View {
-        HStack {
-            if step > 0 && step < 2 {
-                Button(action: onBack) {
-                    Image(systemName: "chevron.left.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundColor(Theme.Colors.onSurfaceVariant.opacity(0.4))
-                }
-            }
-            
-            Text(title)
-                .font(.system(size: 16, weight: .black, design: .rounded))
-                .foregroundColor(.white)
-            
-            Spacer()
-            
-            Button(action: onDismiss) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundColor(Theme.Colors.onSurfaceVariant.opacity(0.4))
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 24)
-        .padding(.bottom, 16)
-    }
-}
-
-struct MuscleSelectionView: View {
-    @Binding var selectedParts: Set<String>
-    let availableParts: [MusclePart]
-    let onNext: () -> Void
-    
-    private let activeGreen = Color(hex: "#30D158")
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            ScrollView(showsIndicators: false) {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140))], spacing: 16) {
-                    ForEach(availableParts) { part in
-                        let isSelected = selectedParts.contains(part.name)
-                        Button(action: {
-                            if isSelected {
-                                selectedParts.remove(part.name)
-                            } else {
-                                selectedParts.insert(part.name)
-                            }
-                        }) {
-                            VStack(spacing: 12) {
-                                Image(systemName: part.icon)
-                                    .font(.system(size: 32))
-                                Text(part.name)
-                                    .font(.system(size: 12, weight: .black, design: .rounded))
-                            }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 120)
-                            .background(isSelected ? activeGreen : Theme.Colors.surfaceContainerHigh.opacity(0.5))
-                            .foregroundColor(isSelected ? .black : .white)
-                            .clipShape(RoundedRectangle(cornerRadius: 24))
-                            .ghostBorder(radius: 24, opacity: isSelected ? 0.4 : 0.1)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
-                    }
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 120)
-            }
-            
-            if !selectedParts.isEmpty {
-                Button(action: onNext) {
-                    HStack {
-                        Text("NEXT")
-                        Image(systemName: "arrow.right")
-                    }
-                    .font(.system(size: 16, weight: .black, design: .rounded))
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-                    .background(activeGreen)
-                    .clipShape(Capsule())
-                    .padding(.horizontal, 48)
-                    .padding(.bottom, 32)
-                    .shadow(color: activeGreen.opacity(0.3), radius: 10, x: 0, y: 5)
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+        .onAppear {
+            if dataManager.activeSession == nil {
+                dataManager.activeSession = ActiveWorkoutSession(date: Date(), exerciseLogs: [])
             }
         }
     }
 }
 
-struct ExerciseSelectionView: View {
-    let muscleParts: Set<String>
-    @Binding var selectedExercises: Set<Exercise>
-    let exerciseLibrary: [Exercise]
-    let onStart: () -> Void
-    
-    private let activeGreen = Color(hex: "#30D158")
-    
-    var filteredExercises: [Exercise] {
-        exerciseLibrary.filter { muscleParts.contains($0.musclePartName) }
-    }
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 12) {
-                    ForEach(filteredExercises) { exercise in
-                        let isSelected = selectedExercises.contains(exercise)
-                        Button(action: {
-                            if isSelected {
-                                selectedExercises.remove(exercise)
-                            } else {
-                                selectedExercises.insert(exercise)
-                            }
-                        }) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(exercise.musclePartName)
-                                        .technicalMicroCopy()
-                                        .foregroundColor(.white.opacity(0.4))
-                                    Text(exercise.name)
-                                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                                        .foregroundColor(.white)
-                                }
-                                Spacer()
-                                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(isSelected ? activeGreen : .white.opacity(0.2))
-                            }
-                            .padding(20)
-                            .background(isSelected ? activeGreen.opacity(0.1) : Theme.Colors.surfaceContainerLow.opacity(0.5))
-                            .clipShape(RoundedRectangle(cornerRadius: 20))
-                            .ghostBorder(radius: 20, opacity: isSelected ? 0.3 : 0.1)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
-                    }
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 120)
-            }
-            
-            if !selectedExercises.isEmpty {
-                Button(action: onStart) {
-                    Text("START WORKOUT")
-                        .font(.system(size: 16, weight: .black, design: .rounded))
-                        .foregroundColor(.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .background(activeGreen)
-                        .clipShape(Capsule())
-                        .padding(.horizontal, 48)
-                        .padding(.bottom, 32)
-                        .shadow(color: activeGreen.opacity(0.3), radius: 10, x: 0, y: 5)
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-    }
-}
+// MARK: - Phase 0: Active Overview
 
-struct ActiveLoggerView: View {
-    @Binding var logs: [ExerciseLog]
+struct ActiveWorkoutOverviewView: View {
+    @EnvironmentObject var dataManager: WorkoutDataManager
+    let onAddExercise: () -> Void
     let onFinish: () -> Void
     
-    private let activeGreen = Color(hex: "#30D158")
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Active Session")
+                    .font(.system(size: 28, weight: .heavy, design: .rounded))
+                    .foregroundColor(.white)
+                Spacer()
+                Text("REC").font(.system(size: 12, weight: .bold)).foregroundColor(.red)
+                Circle().fill(Color.red).frame(width: 8, height: 8)
+            }
+            .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 16)
+            
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 16) {
+                    if let session = dataManager.activeSession, !session.exerciseLogs.isEmpty {
+                        ForEach(session.exerciseLogs) { log in
+                            PaintedLogCard(log: log)
+                        }
+                    } else {
+                        VStack(spacing: 12) {
+                            Spacer().frame(height: 60)
+                            Image(systemName: "dumbbell.fill").font(.system(size: 48)).foregroundColor(.white.opacity(0.1))
+                            Text("Workout Empty").font(.system(size: 18, weight: .bold)).foregroundColor(.gray)
+                            Text("Add an exercise to start painting your canvas.").font(.system(size: 14)).foregroundColor(.white.opacity(0.4))
+                        }
+                    }
+                    
+                    Spacer().frame(height: 100)
+                }
+                .padding(.horizontal, 24).padding(.top, 16)
+            }
+            
+            // Footer Actions
+            VStack(spacing: 16) {
+                Button(action: onAddExercise) {
+                    HStack {
+                        Image(systemName: "plus")
+                        Text("Add Exercise")
+                    }
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
+                    .background(Theme.Colors.surfaceContainerHigh)
+                    .clipShape(Capsule())
+                }
+                
+                Button(action: onFinish) {
+                    Text("FINISH WORKOUT")
+                        .font(.system(size: 16, weight: .black, design: .rounded))
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity).padding(.vertical, 18)
+                        .background(Color(hex: "#30D158"))
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.horizontal, 24).padding(.vertical, 16)
+            .background(Theme.Colors.surface.ignoresSafeArea())
+        }
+    }
+}
+
+struct PaintedLogCard: View {
+    let log: ExerciseLog
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(log.exercise.name).font(.system(size: 18, weight: .black, design: .rounded)).foregroundColor(.white)
+                Spacer()
+                Text("\(log.sets.count) SETS").font(.system(size: 12, weight: .bold)).foregroundColor(.white.opacity(0.7))
+            }
+            .padding(20)
+            .background(Color.white.opacity(0.1))
+            
+            if !log.sets.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(log.sets) { s in
+                        HStack {
+                            Text("\(s.setNumber)").font(.system(size: 12, weight: .black)).foregroundColor(.white.opacity(0.5)).frame(width: 30, alignment: .leading)
+                            Text("\(String(format: "%.1f", s.weight)) \(log.unit.rawValue)").font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                            Spacer()
+                            Text("\(s.reps) reps").font(.system(size: 14, weight: .bold)).foregroundColor(.white.opacity(0.5))
+                        }.padding(.horizontal, 20).padding(.vertical, 6)
+                    }
+                }.padding(.bottom, 16).padding(.top, 8)
+            }
+        }
+        .background(Theme.Colors.surfaceContainerHigh)
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        // Paint it subtly with muscle color (defaulting to primary if we don't have the color easily accessible here)
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(Theme.Colors.primary.opacity(0.3), lineWidth: 2))
+    }
+}
+
+// MARK: - Phase 1: Selection
+
+struct ExerciseSelectionFeedView: View {
+    @EnvironmentObject var dataManager: WorkoutDataManager
+    @State private var selectedMuscle: MusclePart?
+    let onSelect: (Exercise) -> Void
+    let onClose: () -> Void
     
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 24) {
-                    ForEach($logs) { $log in
-                        ActiveExerciseCard(log: $log)
-                    }
-                    
-                    Spacer(minLength: 120)
-                }
-                .padding(.horizontal, 24)
-            }
-            
-            Button(action: onFinish) {
-                Text("FINISH SESSION")
-                    .font(.system(size: 16, weight: .black, design: .rounded))
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-                    .background(Color(hex: "#C4524D")) // Crimson for finish
-                    .clipShape(Capsule())
-                    .padding(.horizontal, 48)
-                    .padding(.bottom, 32)
-                    .shadow(color: Color(hex: "#C4524D").opacity(0.3), radius: 10, x: 0, y: 5)
-            }
-            .background(
-                LinearGradient(colors: [.clear, Theme.Colors.surface], startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            )
-        }
-    }
-}
-
-struct ActiveExerciseCard: View {
-    @Binding var log: ExerciseLog
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+            // Header
             HStack {
-                Text(log.exercise.name.uppercased())
-                    .font(.system(size: 16, weight: .black, design: .rounded))
-                    .foregroundColor(.white)
+                Text("Select Exercise").font(.system(size: 24, weight: .bold, design: .rounded)).foregroundColor(.white)
                 Spacer()
-                Button(action: addSet) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(Theme.Colors.primary.opacity(0.6))
-                }
+                Button(action: onClose) { Image(systemName: "xmark.circle.fill").font(.system(size: 24)).foregroundColor(Theme.Colors.surfaceContainerHighest) }
             }
+            .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 16)
             
-            VStack(spacing: 12) {
-                ForEach($log.sets) { $set in
-                    ActiveSetRow(workoutSet: $set) {
-                        removeSet(set)
+            // Segments
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(dataManager.availableParts) { part in
+                        Text(part.name.capitalized).font(.system(size: 16, weight: selectedMuscle == part ? .bold : .medium))
+                            .foregroundColor(selectedMuscle == part ? .white : .gray).padding(.vertical, 8).padding(.horizontal, 16)
+                            .background(selectedMuscle == part ? Theme.Colors.surfaceContainerHigh : Color.clear).clipShape(Capsule())
+                            .onTapGesture { withAnimation { selectedMuscle = part } }
                     }
+                }.padding(.horizontal, 24)
+            }.padding(.bottom, 12)
+            
+            Divider().background(Color.white.opacity(0.1))
+            
+            // Vertical Feed
+            ScrollView {
+                if let muscle = selectedMuscle {
+                    LazyVStack(spacing: 12) {
+                        ForEach(dataManager.exerciseLibrary.filter { $0.musclePartName == muscle.name }) { ex in
+                            Button(action: { onSelect(ex) }) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(ex.name).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundColor(.white)
+                                        Text(ex.musclePartName).font(.system(size: 10, weight: .bold)).foregroundColor(muscle.color).padding(.horizontal, 8).padding(.vertical, 4).background(muscle.color.opacity(0.15)).clipShape(Capsule())
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundColor(.white.opacity(0.3))
+                                }.padding(20).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 24))
+                            }.buttonStyle(PlainButtonStyle())
+                        }
+                    }.padding(24)
                 }
             }
-        }
-        .padding(24)
-        .background(Theme.Colors.surfaceContainerHigh)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
-        .ghostBorder(radius: 24)
-    }
-    
-    private func addSet() {
-        let newNum = (log.sets.last?.setNumber ?? 0) + 1
-        log.sets.append(WorkoutSet(setNumber: newNum, reps: 0, weight: 0))
-    }
-    
-    private func removeSet(_ workoutSet: WorkoutSet) {
-        if log.sets.count > 1 {
-            log.sets.removeAll(where: { $0.id == workoutSet.id })
-        }
+        }.onAppear { if selectedMuscle == nil { selectedMuscle = dataManager.availableParts.first } }
     }
 }
 
-struct ActiveSetRow: View {
-    @Binding var workoutSet: WorkoutSet
-    var onDelete: () -> Void
+// MARK: - Phase 2: Table Logger with Keyboard Toolbar
+
+struct TableLoggerView: View {
+    let exercise: Exercise
+    let onBack: () -> Void
+    @EnvironmentObject var dataManager: WorkoutDataManager
+    
+    @State private var weightInput: String = ""
+    @State private var repsInput: String = ""
+    @FocusState private var focusedField: Field?
+    enum Field { case weight, reps }
     
     var body: some View {
-        HStack(spacing: 12) {
-            Text("\(workoutSet.setNumber)")
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundColor(.white.opacity(0.3))
-                .frame(width: 20)
-            
-            // Weight Input (Mechanical Roll)
+        VStack(spacing: 0) {
+            // Header
             HStack {
-                TextField("0", value: $workoutSet.weight, format: .number)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .contentTransition(.numericText())
-                Text("KG")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.white.opacity(0.2))
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 56)
-            .background(Theme.Colors.surfaceContainerLowest)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .ghostBorder(radius: 16, opacity: 0.1)
+                Button(action: onBack) {
+                    HStack(spacing: 6) { Image(systemName: "chevron.left"); Text("Done"); }.font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                    .padding(.horizontal, 16).padding(.vertical, 8).background(Theme.Colors.surfaceContainerHigh).clipShape(Capsule())
+                }
+                Spacer()
+            }.padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 16)
             
-            Image(systemName: "xmark")
-                .font(.system(size: 10))
-                .foregroundColor(.white.opacity(0.1))
-            
-            // Reps Input (Mechanical Roll)
-            HStack {
-                TextField("0", value: $workoutSet.reps, format: .number)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .contentTransition(.numericText())
-                Text("REPS")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.white.opacity(0.2))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Title
+                    Text(exercise.name).font(.system(size: 32, weight: .heavy, design: .rounded)).foregroundColor(.white).padding(.horizontal, 24)
+                    
+                    VStack(spacing: 0) {
+                        // Table Header
+                        HStack {
+                            Text("SET").frame(width: 40, alignment: .center)
+                            Text("PREVIOUS").frame(maxWidth: .infinity, alignment: .center)
+                            Text(dataManager.weightUnit.rawValue).frame(width: 80, alignment: .center)
+                            Text("REPS").frame(width: 70, alignment: .center)
+                            Image(systemName: "checkmark").frame(width: 40, alignment: .center)
+                        }.font(.system(size: 12, weight: .bold)).foregroundColor(.gray).padding(.horizontal, 24).padding(.bottom, 12)
+                        
+                        Divider().background(Color.white.opacity(0.1)).padding(.horizontal, 24)
+                        
+                        // Data Rows
+                        if let log = dataManager.activeSession?.exerciseLogs.first(where: { $0.exercise.id == exercise.id }) {
+                            ForEach(log.sets) { s in
+                                HStack {
+                                    Text("\(s.setNumber)").frame(width: 40, alignment: .center).font(.system(size: 14, weight: .black)).foregroundColor(.white)
+                                    // Simulated Previous based on historical data array
+                                    let prevStr = previousDataString(for: s.setNumber)
+                                    Text(prevStr).frame(maxWidth: .infinity, alignment: .center).font(.system(size: 14, weight: .bold)).foregroundColor(.gray.opacity(0.5))
+                                    Text("\(String(format: "%.1f", s.weight).replacingOccurrences(of: ".0", with: ""))")
+                                        .frame(width: 80, height: 36, alignment: .center).font(.system(size: 16, weight: .bold)).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 10)).foregroundColor(.white)
+                                    Text("\(s.reps)")
+                                        .frame(width: 70, height: 36, alignment: .center).font(.system(size: 16, weight: .bold)).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 10)).foregroundColor(.white)
+                                    Image(systemName: "checkmark").frame(width: 40, alignment: .trailing).font(.system(size: 16, weight: .heavy)).foregroundColor(Color(hex: "#30D158"))
+                                }.padding(.horizontal, 24).padding(.vertical, 10)
+                            }
+                        }
+                        
+                        // Active Input Row
+                        let nextSetNum = (dataManager.activeSession?.exerciseLogs.first(where: { $0.exercise.id == exercise.id })?.sets.last?.setNumber ?? 0) + 1
+                        
+                        HStack {
+                            Text("\(nextSetNum)").frame(width: 40, alignment: .center).font(.system(size: 14, weight: .black)).foregroundColor(.white)
+                            Text(previousDataString(for: nextSetNum)).frame(maxWidth: .infinity, alignment: .center).font(.system(size: 12, weight: .bold)).foregroundColor(.gray.opacity(0.5)).lineLimit(1)
+                            
+                            TextField("-", text: $weightInput)
+                                .keyboardType(.decimalPad).focused($focusedField, equals: .weight).multilineTextAlignment(.center)
+                                .frame(width: 80, height: 42).font(.system(size: 18, weight: .black)).foregroundColor(.white).tint(Theme.Colors.primary).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(focusedField == .weight ? Theme.Colors.primary : Color.clear, lineWidth: 2))
+                            
+                            TextField("-", text: $repsInput)
+                                .keyboardType(.numberPad).focused($focusedField, equals: .reps).multilineTextAlignment(.center)
+                                .frame(width: 70, height: 42).font(.system(size: 18, weight: .black)).foregroundColor(.white).tint(Theme.Colors.primary).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(focusedField == .reps ? Theme.Colors.primary : Color.clear, lineWidth: 2))
+                            
+                            Button(action: logSet) {
+                                Image(systemName: "checkmark").frame(width: 32, height: 32).background(Color(hex: "#30D158")).clipShape(Circle()).foregroundColor(Theme.Colors.surface).font(.system(size: 14, weight: .black))
+                            }.frame(width: 40, alignment: .trailing).disabled(weightInput.isEmpty || repsInput.isEmpty).opacity(weightInput.isEmpty || repsInput.isEmpty ? 0.3 : 1.0)
+                        }.padding(.horizontal, 24).padding(.vertical, 16).background(Theme.Colors.surfaceContainerLowest.opacity(0.5))
+                    }.padding(.top, 8)
+                    Spacer().frame(height: 100)
+                }
             }
-            .padding(.horizontal, 12)
-            .frame(height: 56)
-            .background(Theme.Colors.surfaceContainerLowest)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .ghostBorder(radius: 16, opacity: 0.1)
-            
-            Button(action: onDelete) {
-                Image(systemName: "trash.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(Theme.Colors.error.opacity(0.4))
-            }
-            .frame(width: 44, height: 56)
+            .scrollDismissesKeyboard(.interactively)
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: workoutSet.weight)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: workoutSet.reps)
+        .background(Theme.Colors.surface.ignoresSafeArea())
+        .onAppear {
+            focusedField = .weight
+            populatePrevious()
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                if focusedField == .weight {
+                    Spacer()
+                    Button(action: { focusedField = .reps }) {
+                        Text("Next (Reps)").font(.system(size: 16, weight: .bold))
+                    }
+                } else if focusedField == .reps {
+                    Button(action: { focusedField = .weight }) {
+                        HStack { Image(systemName: "chevron.left"); Text("Weight") }
+                    }
+                    Spacer()
+                    Button(action: logSet) {
+                        Text("Log Set").font(.system(size: 16, weight: .bold)).foregroundColor(.green)
+                    }.disabled(weightInput.isEmpty || repsInput.isEmpty)
+                }
+            }
+        }
+    }
+    
+    private func previousDataString(for setNum: Int) -> String {
+        if setNum - 1 < exercise.previousSets.count {
+            let pSet = exercise.previousSets[setNum - 1]
+            return "\(String(format: "%.0f", pSet.weight)) × \(pSet.reps)"
+        }
+        return "-"
+    }
+    
+    private func populatePrevious() {
+        let nextSetNum = (dataManager.activeSession?.exerciseLogs.first(where: { $0.exercise.id == exercise.id })?.sets.last?.setNumber ?? 0) + 1
+        if nextSetNum - 1 < exercise.previousSets.count {
+            weightInput = String(format: "%.1f", exercise.previousSets[nextSetNum - 1].weight).replacingOccurrences(of: ".0", with: "")
+        }
+    }
+    
+    private func logSet() {
+        guard let w = Double(weightInput), let r = Int(repsInput) else { return }
+        
+        if dataManager.activeSession == nil { dataManager.activeSession = ActiveWorkoutSession(date: Date(), exerciseLogs: []) }
+        
+        if let idx = dataManager.activeSession?.exerciseLogs.firstIndex(where: { $0.exercise.id == exercise.id }) {
+            let n = (dataManager.activeSession?.exerciseLogs[idx].sets.last?.setNumber ?? 0) + 1
+            dataManager.activeSession?.exerciseLogs[idx].sets.append(WorkoutSet(setNumber: n, reps: r, weight: w))
+        } else {
+            dataManager.activeSession?.exerciseLogs.append(ExerciseLog(exercise: exercise, sets: [WorkoutSet(setNumber: 1, reps: r, weight: w)], unit: dataManager.weightUnit))
+        }
+        
+        repsInput = ""
+        focusedField = .weight
+        populatePrevious()
+        let gen = UINotificationFeedbackGenerator()
+        gen.notificationOccurred(.success)
     }
 }
 
 #Preview {
-    WorkoutSessionView()
-        .environmentObject(WorkoutDataManager())
+    WorkoutSessionView().environmentObject(WorkoutDataManager())
 }

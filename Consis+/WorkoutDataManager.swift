@@ -14,10 +14,34 @@ public struct MusclePart: Identifiable, Hashable {
     }
 }
 
+public enum WeightUnit: String, Codable, CaseIterable, Hashable {
+    case kg = "KG"
+    case lbs = "LBS"
+    
+    public func convert(_ weight: Double, from: WeightUnit) -> Double {
+        if self == from { return weight }
+        if self == .kg { return weight * 0.453592 }
+        return weight * 2.20462
+    }
+}
+
 public struct Exercise: Identifiable, Hashable {
     public let id = UUID()
     public let name: String
-    public let musclePartName: String // Links to MusclePart.name
+    public let musclePartName: String
+    public var usageCount: Int
+    public var maxWeight: Double // All-time PR
+    public var lastPerformance: String // Fallback string
+    public var previousSets: [WorkoutSet] // For set-by-set mapping
+    
+    public init(name: String, musclePartName: String, usageCount: Int = 0, maxWeight: Double = 0, lastPerformance: String = "-", previousSets: [WorkoutSet] = []) {
+        self.name = name
+        self.musclePartName = musclePartName
+        self.usageCount = usageCount
+        self.maxWeight = maxWeight
+        self.lastPerformance = lastPerformance
+        self.previousSets = previousSets
+    }
 }
 
 public struct WorkoutSet: Identifiable, Hashable {
@@ -39,6 +63,7 @@ public struct ExerciseLog: Identifiable, Hashable {
     public let id = UUID()
     public let exercise: Exercise
     public var sets: [WorkoutSet]
+    public var unit: WeightUnit = .kg
 }
 
 public struct ActiveWorkoutSession: Identifiable {
@@ -48,6 +73,7 @@ public struct ActiveWorkoutSession: Identifiable {
 }
 
 public class WorkoutDataManager: ObservableObject {
+    @Published public var weightUnit: WeightUnit = .kg
     @Published public var routine: [Int: [MusclePart]] = [
         2: [MusclePart(name: "CHEST", color: Color(hex: "#FF453A"), icon: "shield.fill"), 
             MusclePart(name: "TRICEPS", color: Color(hex: "#0A84FF"), icon: "bolt.fill")],
@@ -73,25 +99,35 @@ public class WorkoutDataManager: ObservableObject {
     ]
     
     public let exerciseLibrary = [
-        Exercise(name: "Barbell Bench Press", musclePartName: "CHEST"),
-        Exercise(name: "Incline Dumbbell Press", musclePartName: "CHEST"),
-        Exercise(name: "Cable Crossovers", musclePartName: "CHEST"),
-        Exercise(name: "Deadlift", musclePartName: "BACK"),
-        Exercise(name: "Pull-ups", musclePartName: "BACK"),
-        Exercise(name: "Bent Over Rows", musclePartName: "BACK"),
-        Exercise(name: "Squats", musclePartName: "LEGS"),
-        Exercise(name: "Leg Press", musclePartName: "LEGS"),
-        Exercise(name: "Lunges", musclePartName: "LEGS"),
-        Exercise(name: "Overhead Press", musclePartName: "SHOULDERS"),
-        Exercise(name: "Lateral Raises", musclePartName: "SHOULDERS"),
-        Exercise(name: "Bicep Curls", musclePartName: "BICEPS"),
-        Exercise(name: "Hammer Curls", musclePartName: "BICEPS"),
-        Exercise(name: "Tricep Pushdowns", musclePartName: "TRICEPS"),
-        Exercise(name: "Skull Crushers", musclePartName: "TRICEPS"),
-        Exercise(name: "Plank", musclePartName: "ABS"),
-        Exercise(name: "Crunches", musclePartName: "ABS"),
-        Exercise(name: "Running", musclePartName: "CARDIO"),
-        Exercise(name: "Cycling", musclePartName: "CARDIO")
+        Exercise(name: "Barbell Bench Press", musclePartName: "CHEST", usageCount: 50, maxWeight: 100, lastPerformance: "80 KG x 10", previousSets: [
+            WorkoutSet(setNumber: 1, reps: 10, weight: 80),
+            WorkoutSet(setNumber: 2, reps: 8, weight: 80),
+            WorkoutSet(setNumber: 3, reps: 6, weight: 85)
+        ]),
+        Exercise(name: "Incline Dumbbell Press", musclePartName: "CHEST", usageCount: 30, maxWeight: 40, lastPerformance: "35 KG x 8"),
+        Exercise(name: "Cable Crossovers", musclePartName: "CHEST", usageCount: 10, maxWeight: 25, lastPerformance: "20 KG x 15"),
+        Exercise(name: "Deadlift", musclePartName: "BACK", usageCount: 45, maxWeight: 180, lastPerformance: "140 KG x 5", previousSets: [
+            WorkoutSet(setNumber: 1, reps: 5, weight: 140),
+            WorkoutSet(setNumber: 2, reps: 3, weight: 150)
+        ]),
+        Exercise(name: "Pull-ups", musclePartName: "BACK", usageCount: 60, maxWeight: 0, lastPerformance: "BW x 12"),
+        Exercise(name: "Bent Over Rows", musclePartName: "BACK", usageCount: 20, maxWeight: 90, lastPerformance: "70 KG x 10"),
+        Exercise(name: "Squats", musclePartName: "LEGS", usageCount: 80, maxWeight: 140, lastPerformance: "120 KG x 6", previousSets: [
+            WorkoutSet(setNumber: 1, reps: 8, weight: 100),
+            WorkoutSet(setNumber: 2, reps: 6, weight: 120)
+        ]),
+        Exercise(name: "Leg Press", musclePartName: "LEGS", usageCount: 15, maxWeight: 300, lastPerformance: "250 KG x 12"),
+        Exercise(name: "Lunges", musclePartName: "LEGS", usageCount: 10, maxWeight: 60, lastPerformance: "50 KG x 10"),
+        Exercise(name: "Overhead Press", musclePartName: "SHOULDERS", usageCount: 40, maxWeight: 60, lastPerformance: "50 KG x 8"),
+        Exercise(name: "Lateral Raises", musclePartName: "SHOULDERS", usageCount: 35, maxWeight: 15, lastPerformance: "12 KG x 12"),
+        Exercise(name: "Bicep Curls", musclePartName: "BICEPS", usageCount: 55, maxWeight: 25, lastPerformance: "20 KG x 10"),
+        Exercise(name: "Hammer Curls", musclePartName: "BICEPS", usageCount: 25, maxWeight: 20, lastPerformance: "18 KG x 12"),
+        Exercise(name: "Tricep Pushdowns", musclePartName: "TRICEPS", usageCount: 48, maxWeight: 45, lastPerformance: "35 KG x 12"),
+        Exercise(name: "Skull Crushers", musclePartName: "TRICEPS", usageCount: 12, maxWeight: 35, lastPerformance: "30 KG x 8"),
+        Exercise(name: "Plank", musclePartName: "ABS", usageCount: 70, maxWeight: 0, lastPerformance: "2min"),
+        Exercise(name: "Crunches", musclePartName: "ABS", usageCount: 40, maxWeight: 0, lastPerformance: "30 reps"),
+        Exercise(name: "Running", musclePartName: "CARDIO", usageCount: 100, maxWeight: 0, lastPerformance: "5km in 25min"),
+        Exercise(name: "Cycling", musclePartName: "CARDIO", usageCount: 20, maxWeight: 0, lastPerformance: "10km in 20min")
     ]
     
     public init() {}
