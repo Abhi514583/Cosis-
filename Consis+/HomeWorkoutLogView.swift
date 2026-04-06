@@ -3,68 +3,7 @@ import SwiftUI
 public struct HomeWorkoutLogView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @State private var selectedDate = Date()
-    @State private var isExerciseListVisible = true
     @State private var dotOffset: CGSize = .zero
-    
-    // Computed properties for dynamic daily stats
-    private var dailyMuscleParts: [MusclePart] {
-        dataManager.parts(for: selectedDate)
-    }
-    
-    private var dailyWorkouts: [(name: String, sets: [WorkoutSet])] {
-        let weekday = Calendar.current.component(.weekday, from: selectedDate)
-        // For now, keep the mock workout mapping, but we could eventually map parts to exercises
-        switch weekday {
-        case 2, 5: // Chest days
-            return [
-                ("Barbell Bench Press", [
-                    WorkoutSet(setNumber: 1, reps: 8, weight: 135),
-                    WorkoutSet(setNumber: 2, reps: 8, weight: 135),
-                    WorkoutSet(setNumber: 3, reps: 6, weight: 155, isPR: weekday == 5)
-                ]),
-                ("Incline Dumbbell Press", [
-                    WorkoutSet(setNumber: 1, reps: 10, weight: 65),
-                    WorkoutSet(setNumber: 2, reps: 10, weight: 65)
-                ])
-            ]
-        case 3: // Back day
-            return [
-                ("Deadlift", [
-                    WorkoutSet(setNumber: 1, reps: 5, weight: 225),
-                    WorkoutSet(setNumber: 2, reps: 5, weight: 275),
-                    WorkoutSet(setNumber: 3, reps: 5, weight: 315)
-                ]),
-                ("Pull-ups", [
-                    WorkoutSet(setNumber: 1, reps: 12, weight: 0),
-                    WorkoutSet(setNumber: 2, reps: 10, weight: 0)
-                ])
-            ]
-        case 4, 7: // Leg days
-            return [
-                ("Squats", [
-                    WorkoutSet(setNumber: 1, reps: 10, weight: 185),
-                    WorkoutSet(setNumber: 2, reps: 10, weight: 205),
-                    WorkoutSet(setNumber: 3, reps: 8, weight: 225)
-                ]),
-                ("Leg Press", [
-                    WorkoutSet(setNumber: 1, reps: 15, weight: 360),
-                    WorkoutSet(setNumber: 2, reps: 15, weight: 360)
-                ])
-            ]
-        case 6: // Shoulders/Arms
-            return [
-                ("Overhead Press", [
-                    WorkoutSet(setNumber: 1, reps: 8, weight: 95),
-                    WorkoutSet(setNumber: 2, reps: 8, weight: 115)
-                ]),
-                ("Bicep Curls", [
-                    WorkoutSet(setNumber: 1, reps: 12, weight: 35),
-                    WorkoutSet(setNumber: 2, reps: 12, weight: 35)
-                ])
-            ]
-        default: return []
-        }
-    }
     
     public var body: some View {
         GeometryReader { geo in
@@ -72,64 +11,58 @@ public struct HomeWorkoutLogView: View {
                 Theme.Colors.surface.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // PINNED HEADER SECTION (Now fixed and tighter)
-                    VStack(spacing: 0) {
-                        HStack(alignment: .center) {
-                            HStack(spacing: 8) {
-                                Text(selectedDate.formatted(.dateTime.day(.twoDigits)))
-                                    .font(.system(size: 64, weight: .heavy, design: .rounded))
-                                    .foregroundColor(.white)
-                                    .contentTransition(.numericText(value: selectedDate.timeIntervalSince1970))
-                                
-                                // Glowing Dynamic Accent Heart
-                                Image(systemName: "heart.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(dataManager.accentColor)
-                                    .shadow(color: dataManager.accentColor.opacity(0.8), radius: 12, x: 0, y: 0)
-                                    .shadow(color: dataManager.accentColor.opacity(0.4), radius: 20, x: 0, y: 0)
-                                    .offset(x: dotOffset.width, y: 8 + dotOffset.height) 
-                                    .gesture(
-                                        DragGesture()
-                                            .onChanged { gesture in
-                                                dotOffset = gesture.translation
-                                            }
-                                            .onEnded { _ in
-                                                let generator = UIImpactFeedbackGenerator(style: .medium)
-                                                generator.impactOccurred()
-                                                
-                                                withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
-                                                    dotOffset = .zero
-                                                }
-                                            }
-                                    )
-                                    .zIndex(100)
-                            }
-                            .onTapGesture {
-                                jumpToToday()
-                            }
-                            
-                            Spacer()
-                            
-                            VStack(alignment: .trailing, spacing: -2) {
-                                Text(selectedDate.formatted(.dateTime.month(.wide)) + " " + selectedDate.formatted(.dateTime.day(.twoDigits)))
-                                    .font(.system(size: 16, weight: .bold)) 
-                                    .foregroundColor(Theme.Colors.onSurfaceVariant)
-                                
-                                Text(selectedDate.formatted(.dateTime.year()))
-                                    .font(.system(size: 16, weight: .bold)) 
-                                    .foregroundColor(Theme.Colors.outlineVariant)
-                            }
+                    // PINNED HEADER (DATE & HEART)
+                    HStack(spacing: 12) {
+                        Text(selectedDate.formatted(.dateTime.day()))
+                            .font(.system(size: 80, weight: .black, design: .rounded))
+                            .foregroundColor(.white)
+                            .contentTransition(.numericText())
+                        
+                        // Glowing Dynamic Accent Heart
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(dataManager.accentColor)
+                            .shadow(color: dataManager.accentColor.opacity(0.8), radius: 12, x: 0, y: 0)
+                            .shadow(color: dataManager.accentColor.opacity(0.4), radius: 20, x: 0, y: 0)
+                            .offset(x: dotOffset.width, y: 8 + dotOffset.height) 
+                            .gesture(
+                                DragGesture()
+                                    .onChanged { gesture in
+                                        dotOffset = gesture.translation
+                                    }
+                                    .onEnded { _ in
+                                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                                        generator.impactOccurred()
+                                        
+                                        withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
+                                            dotOffset = .zero
+                                        }
+                                    }
+                            )
+                            .onTapGesture { jumpToToday() }
+                            .zIndex(100)
+                        
+                        Spacer()
+                        
+                        VStack(alignment: .trailing, spacing: -2) {
+                            Text(selectedDate.formatted(.dateTime.month().day()))
+                                .font(.system(size: 20, weight: .black, design: .rounded))
+                                .foregroundColor(dataManager.primaryColor.opacity(0.8))
+                                .contentTransition(.numericText())
+                            Text(selectedDate.formatted(.dateTime.year()))
+                                .font(.system(size: 24, weight: .black, design: .rounded))
+                                .foregroundColor(Theme.Colors.onSurfaceVariant.opacity(0.3))
+                                .contentTransition(.numericText())
                         }
-                        .padding(.horizontal, 24)
                     }
-                    .frame(height: geo.size.height * 0.10) // Tighter fixed header
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
                     .background(Theme.Colors.surface)
                     .zIndex(1) 
                     
                     // FIXED HORIZONTAL RAIL + PAGER SECTION
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 8) {
-                            // DateRail is now FIXED HORIZONTALLY relative to moving cards
                             DateRailView(selectedDate: $selectedDate)
                                 .padding(.top, 4)
                             
@@ -145,6 +78,7 @@ public struct HomeWorkoutLogView: View {
                     }
                     .frame(height: geo.size.height * 0.90) 
                 }
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: selectedDate)
             }
         }
     }
@@ -168,7 +102,7 @@ public struct HomeWorkoutLogView: View {
     }
 }
 
-// Subview for the daily log content (No ScrollView here to prevent nested conflict)
+// Subview for the daily log content
 struct DailyLogView: View {
     let date: Date
     @EnvironmentObject var dataManager: WorkoutDataManager
@@ -228,7 +162,7 @@ struct DailyLogView: View {
                     .background(ZStack { Theme.Colors.surfaceContainerHigh; LinearGradient(colors: [dataManager.primaryColor.opacity(0.05), .clear], startPoint: .topLeading, endPoint: .bottomTrailing) })
                     .clipShape(RoundedRectangle(cornerRadius: 32)).ghostBorder(radius: 32).shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
                 }
-                .buttonStyle(PlainButtonStyle()).padding(.horizontal, 24).padding(.top, 8)
+                .buttonStyle(ScaleButtonStyle()).padding(.horizontal, 24).padding(.top, 8)
                 
                 if isExerciseListVisible {
                     VStack(spacing: 12) {
@@ -246,4 +180,3 @@ struct DailyLogView: View {
 #Preview {
     HomeWorkoutLogView()
 }
-

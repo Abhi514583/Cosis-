@@ -103,6 +103,7 @@ struct DayButton: View {
                 Text(date.formatted(.dateTime.day()))
                     .font(.system(size: 24, weight: .black))
                     .foregroundColor(isSelected ? .white : Theme.Colors.onSurfaceVariant.opacity(0.4))
+                    .contentTransition(.numericText())
                 
                 Text(date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
                     .font(.system(size: 11, weight: .bold))
