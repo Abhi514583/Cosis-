@@ -72,9 +72,14 @@ public struct DateRailView: View {
         .scrollPosition(id: $visibleWeekIndex)
         .scrollTargetBehavior(.paging)
         .onChange(of: visibleWeekIndex) { old, new in
-            if new != nil && old != new {
+            if let newIndex = new, old != new {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
+                
+                // When swiping to a new week, select the first day (Monday) of that week
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    selectedDate = weeks[newIndex][0]
+                }
             }
         }
     }
