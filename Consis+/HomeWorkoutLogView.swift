@@ -3,7 +3,14 @@ import SwiftUI
 public struct HomeWorkoutLogView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @Binding var selectedDate: Date
+    var onQuickLog: ((Exercise) -> Void)? = nil
+    
     @State private var dotOffset: CGSize = .zero
+    @AppStorage("userName") private var userName: String = "Abhi's"
+    
+    @State private var isEditingName = false
+    @State private var tempName = ""
+    @FocusState private var isNameFocused: Bool
     
     public var body: some View {
         GeometryReader { geo in
@@ -44,6 +51,29 @@ public struct HomeWorkoutLogView: View {
                         
                         Spacer()
                         
+                        Button(action: {
+                            tempName = userName
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                isEditingName = true
+                            }
+                        }) {
+                            VStack(spacing: -2) {
+                                Text(userName)
+                                    .font(.system(size: 20, weight: .black, design: .rounded))
+                                    .foregroundColor(dataManager.primaryColor)
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(1)
+                                
+                                Text("Logger")
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundColor(Theme.Colors.onSurfaceVariant)
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .frame(maxWidth: 130)
+                        
+                        Spacer()
+                        
                         VStack(alignment: .trailing, spacing: -2) {
                             Text(selectedDate.formatted(.dateTime.month().day()))
                                 .font(.system(size: 20, weight: .black, design: .rounded))
@@ -68,7 +98,7 @@ public struct HomeWorkoutLogView: View {
                             
                             TabView(selection: $selectedDate) {
                                 ForEach(generateDateRange(), id: \.self) { date in
-                                    DailyLogView(date: date)
+                                    DailyLogView(date: date, onQuickLog: onQuickLog)
                                         .tag(date)
                                 }
                             }
@@ -79,6 +109,74 @@ public struct HomeWorkoutLogView: View {
                     .frame(height: geo.size.height * 0.90) 
                 }
                 .animation(.spring(response: 0.4, dampingFraction: 0.8), value: selectedDate)
+                
+                // Name Editing Glass Overlay
+                if isEditingName {
+                    Color.black.opacity(0.6)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation(.spring()) {
+                                userName = tempName.isEmpty ? "Abhi's" : tempName
+                                isEditingName = false
+                            }
+                            isNameFocused = false
+                        }
+                    
+                    VStack {
+                        HStack(spacing: 16) {
+                            TextField("Enter your name", text: $tempName)
+                                .focused($isNameFocused)
+                                .font(.system(size: 22, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.leading)
+                                .submitLabel(.done)
+                                .onSubmit {
+                                    withAnimation(.spring()) {
+                                        userName = tempName.isEmpty ? "Abhi's" : tempName
+                                        isEditingName = false
+                                    }
+                                }
+                            
+                            Button(action: {
+                                let generator = UIImpactFeedbackGenerator(style: .medium)
+                                generator.impactOccurred()
+                                withAnimation(.spring()) {
+                                    userName = tempName.isEmpty ? "Abhi's" : tempName
+                                    isEditingName = false
+                                }
+                                isNameFocused = false
+                            }) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(dataManager.primaryColor)
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 28)
+                                .fill(Theme.Colors.surfaceContainerHigh.opacity(0.7))
+                                .background(.ultraThinMaterial)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 28))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 28)
+                                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                        )
+                        .shadow(color: .black.opacity(0.4), radius: 30, x: 0, y: 15)
+                        .padding(.horizontal, 24)
+                        
+                        Spacer()
+                    }
+                    .padding(.top, 80)
+                    .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.9)))
+                    .zIndex(200)
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            isNameFocused = true
+                        }
+                    }
+                }
             }
         }
     }
@@ -105,6 +203,7 @@ public struct HomeWorkoutLogView: View {
 // Subview for the daily log content
 struct DailyLogView: View {
     let date: Date
+    var onQuickLog: ((Exercise) -> Void)? = nil
     @EnvironmentObject var dataManager: WorkoutDataManager
     @State private var isExerciseListVisible = false
     
@@ -125,6 +224,33 @@ struct DailyLogView: View {
         case 6: return [("Overhead Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 95)]), ("Bicep Curls", [WorkoutSet(setNumber: 1, reps: 12, weight: 35)])]
         default: return []
         }
+    }
+    
+    private var displayWorkouts: [(name: String, sets: [WorkoutSet])] {
+        let isToday = Calendar.current.isDateInToday(date)
+        var merged = dailyWorkouts
+        
+        if isToday, let session = dataManager.activeSession {
+            var activeExerciseNames = Set<String>()
+            
+            // Override templated exercises with logged ones
+            for i in 0..<merged.count {
+                if let activeLog = session.exerciseLogs.first(where: { $0.exercise.name == merged[i].name }) {
+                    merged[i].sets = activeLog.sets
+                    activeExerciseNames.insert(merged[i].name)
+                } else {
+                    merged[i].sets = [] // Show empty if not started
+                }
+            }
+            
+            // Add any extra exercises they logged outside the template
+            for log in session.exerciseLogs {
+                if !activeExerciseNames.contains(log.exercise.name) {
+                    merged.append((name: log.exercise.name, sets: log.sets))
+                }
+            }
+        }
+        return merged
     }
 
     var body: some View {
@@ -166,8 +292,16 @@ struct DailyLogView: View {
                 
                 if isExerciseListVisible {
                     VStack(spacing: 12) {
-                        ForEach(dailyWorkouts, id: \.name) { workout in
+                        ForEach(displayWorkouts, id: \.name) { workout in
                             WorkoutLogCard(exerciseName: workout.name, sets: workout.sets)
+                                .onTapGesture {
+                                    if let ex = dataManager.exerciseLibrary.first(where: { $0.name == workout.name }) {
+                                        onQuickLog?(ex)
+                                    } else {
+                                        let fallback = Exercise(name: workout.name, musclePartName: "CUSTOM")
+                                        onQuickLog?(fallback)
+                                    }
+                                }
                         }
                     }.padding(.top, 8)
                 }

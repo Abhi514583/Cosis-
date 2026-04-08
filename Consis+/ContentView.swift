@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var isBuildingRoutine = false
     @State private var isStartingWorkout = false
     @State private var isSettingsOpen = false
+    @State private var initialExercise: Exercise? = nil
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -17,11 +18,17 @@ struct ContentView: View {
             Group {
                 switch selectedTab {
                 case 0:
-                    HomeWorkoutLogView(selectedDate: $selectedDate)
+                    HomeWorkoutLogView(selectedDate: $selectedDate, onQuickLog: { ex in
+                        initialExercise = ex
+                        isStartingWorkout = true
+                    })
                 case 1:
                     AnalyticsView()
                 default:
-                    HomeWorkoutLogView(selectedDate: $selectedDate)
+                    HomeWorkoutLogView(selectedDate: $selectedDate, onQuickLog: { ex in
+                        initialExercise = ex
+                        isStartingWorkout = true
+                    })
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -64,8 +71,11 @@ struct ContentView: View {
                 .environmentObject(dataManager)
         }
         .fullScreenCover(isPresented: $isStartingWorkout) {
-            WorkoutSessionView()
+            WorkoutSessionView(initialExercise: initialExercise)
                 .environmentObject(dataManager)
+                .onDisappear {
+                    initialExercise = nil // Reset state when logger closes
+                }
         }
         .sheet(isPresented: $isSettingsOpen) {
             SettingsView()

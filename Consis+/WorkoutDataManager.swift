@@ -86,8 +86,7 @@ public class WorkoutDataManager: ObservableObject {
     // Theme Customization
     @Published public var primaryColor: Color = Color(hex: "#C4524D") // Crimson
     @Published public var accentColor: Color = Color(hex: "#FF2D55") // Glowing Red for Heart
-    
-    public let availableParts = [
+    @Published public var availableParts: [MusclePart] = [
         MusclePart(name: "CHEST", color: Color(hex: "#FF453A"), icon: "shield.fill"),
         MusclePart(name: "BACK", color: Color(hex: "#30D158"), icon: "figure.walk"),
         MusclePart(name: "LEGS", color: Color(hex: "#FF9F0A"), icon: "flame.fill"),
@@ -98,7 +97,7 @@ public class WorkoutDataManager: ObservableObject {
         MusclePart(name: "CARDIO", color: Color(hex: "#32ADE6"), icon: "heart.fill")
     ]
     
-    public let exerciseLibrary = [
+    @Published public var exerciseLibrary = [
         Exercise(name: "Barbell Bench Press", musclePartName: "CHEST", usageCount: 50, maxWeight: 100, lastPerformance: "80 KG x 10", previousSets: [
             WorkoutSet(setNumber: 1, reps: 10, weight: 80),
             WorkoutSet(setNumber: 2, reps: 8, weight: 80),

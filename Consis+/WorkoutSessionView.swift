@@ -11,6 +11,13 @@ public struct WorkoutSessionView: View {
     }
     
     @State private var phase: SessionPhase = .overview
+    @State private var selectedMuscle: MusclePart?
+    
+    public init(initialExercise: Exercise? = nil) {
+        if let ex = initialExercise {
+            _phase = State(initialValue: .logging(ex))
+        }
+    }
     
     public var body: some View {
         ZStack {
@@ -23,10 +30,14 @@ public struct WorkoutSessionView: View {
                     onFinish: {
                         dataManager.activeSession = nil
                         dismiss()
+                    },
+                    onResumeExercise: { ex in 
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .logging(ex) } 
                     }
                 )
             case .selection:
                 ExerciseSelectionFeedView(
+                    selectedMuscle: $selectedMuscle,
                     onSelect: { ex in withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .logging(ex) } },
                     onClose: { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .overview } }
                 )
@@ -51,6 +62,7 @@ struct ActiveWorkoutOverviewView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     let onAddExercise: () -> Void
     let onFinish: () -> Void
+    let onResumeExercise: (Exercise) -> Void
     
     var body: some View {
         VStack(spacing: 0) {
@@ -70,6 +82,9 @@ struct ActiveWorkoutOverviewView: View {
                     if let session = dataManager.activeSession, !session.exerciseLogs.isEmpty {
                         ForEach(session.exerciseLogs) { log in
                             PaintedLogCard(log: log)
+                                .onTapGesture {
+                                    onResumeExercise(log.exercise)
+                                }
                         }
                     } else {
                         VStack(spacing: 12) {
@@ -150,9 +165,10 @@ struct PaintedLogCard: View {
 
 struct ExerciseSelectionFeedView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
-    @State private var selectedMuscle: MusclePart?
+    @Binding var selectedMuscle: MusclePart?
     let onSelect: (Exercise) -> Void
     let onClose: () -> Void
+    @State private var showCreateCustom = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -194,10 +210,72 @@ struct ExerciseSelectionFeedView: View {
                                 }.padding(20).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 24))
                             }.buttonStyle(PlainButtonStyle())
                         }
+                        
+                        Button(action: { showCreateCustom = true }) {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                Text("Create Custom Exercise")
+                            }
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(Theme.Colors.primary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 20)
+                            .background(Theme.Colors.surfaceContainerLow)
+                            .clipShape(RoundedRectangle(cornerRadius: 24))
+                            .overlay(RoundedRectangle(cornerRadius: 24).stroke(Theme.Colors.primary.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [6, 6])))
+                        }
+                        .padding(.top, 12)
                     }.padding(24)
                 }
             }
-        }.onAppear { if selectedMuscle == nil { selectedMuscle = dataManager.availableParts.first } }
+        }
+        .onAppear { if selectedMuscle == nil { selectedMuscle = dataManager.availableParts.first } }
+        .sheet(isPresented: $showCreateCustom) {
+            CreateCustomExerciseSheet(selectedMuscle: $selectedMuscle)
+        }
+    }
+}
+
+// MARK: - Phase 1.5: Custom Exercise Sheet
+
+struct CreateCustomExerciseSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataManager: WorkoutDataManager
+    @Binding var selectedMuscle: MusclePart?
+    @State private var rawName: String = ""
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            HStack {
+                Text("New Custom Exercise").font(.system(size: 24, weight: .black, design: .rounded)).foregroundColor(.white)
+                Spacer()
+                Button(action: { dismiss() }) { Image(systemName: "xmark.circle.fill").font(.system(size: 24)).foregroundColor(Theme.Colors.surfaceContainerHighest) }
+            }.padding(.top, 32)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("EXERCISE NAME").font(.system(size: 12, weight: .bold)).foregroundColor(.gray)
+                TextField("e.g. Incline Machine Press", text: $rawName)
+                    .font(.system(size: 20, weight: .bold)).foregroundColor(.white)
+                    .padding().background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .padding(.top, 16)
+            
+            Spacer()
+            
+            Button(action: {
+                let m = selectedMuscle?.name ?? "CUSTOM"
+                let ex = Exercise(name: rawName, musclePartName: m)
+                dataManager.exerciseLibrary.append(ex)
+                dismiss()
+            }) {
+                Text("CREATE & ADD TO LIBRARY")
+                    .font(.system(size: 16, weight: .black, design: .rounded)).foregroundColor(.black)
+                    .frame(maxWidth: .infinity).padding(.vertical, 18).background(Color(hex: "#30D158")).clipShape(Capsule())
+            }
+            .disabled(rawName.isEmpty).opacity(rawName.isEmpty ? 0.3 : 1.0)
+            .padding(.bottom, 24)
+        }
+        .padding(.horizontal, 24).background(Theme.Colors.surface.ignoresSafeArea())
     }
 }
 
@@ -217,17 +295,53 @@ struct TableLoggerView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Button(action: onBack) {
-                    HStack(spacing: 6) { Image(systemName: "chevron.left"); Text("Done"); }.font(.system(size: 16, weight: .bold)).foregroundColor(.white)
-                    .padding(.horizontal, 16).padding(.vertical, 8).background(Theme.Colors.surfaceContainerHigh).clipShape(Capsule())
-                }
                 Spacer()
-            }.padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 16)
+                // Settings/Unit toggle
+                Button(action: {
+                    let old = dataManager.weightUnit
+                    dataManager.weightUnit = old == .kg ? .lbs : .kg
+                    let gen = UIImpactFeedbackGenerator(style: .light)
+                    gen.impactOccurred()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.left.arrow.right").font(.system(size: 10))
+                        Text(dataManager.weightUnit.rawValue)
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(Theme.Colors.surfaceContainerHigh)
+                    .clipShape(Capsule())
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    // Title
-                    Text(exercise.name).font(.system(size: 32, weight: .heavy, design: .rounded)).foregroundColor(.white).padding(.horizontal, 24)
+                    // NEW PR Title Display
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(exercise.name)
+                            .font(.system(size: 32, weight: .heavy, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(2)
+                            .padding(.horizontal, 24)
+                        
+                        HStack {
+                            SuggestionPill(baseWeight: exercise.maxWeight, baseReps: exercise.previousSets.first?.reps ?? 10) { suggestedWeight, suggestedReps in
+                                weightInput = String(format: "%.1f", suggestedWeight).replacingOccurrences(of: ".0", with: "")
+                                repsInput = "\(suggestedReps)"
+                                
+                                // Auto-focus weight field after tap if not already
+                                focusedField = .weight
+                                let gen = UINotificationFeedbackGenerator()
+                                gen.notificationOccurred(.success)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 24)
+                    }
                     
                     VStack(spacing: 0) {
                         // Table Header
@@ -280,10 +394,31 @@ struct TableLoggerView: View {
                             }.frame(width: 40, alignment: .trailing).disabled(weightInput.isEmpty || repsInput.isEmpty).opacity(weightInput.isEmpty || repsInput.isEmpty ? 0.3 : 1.0)
                         }.padding(.horizontal, 24).padding(.vertical, 16).background(Theme.Colors.surfaceContainerLowest.opacity(0.5))
                     }.padding(.top, 8)
+                    
                     Spacer().frame(height: 100)
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            
+            // Sticky Footer for Finish Button
+            VStack {
+                Button(action: onBack) {
+                    HStack {
+                        Text("FINISH EXERCISE")
+                        Image(systemName: "arrow.right")
+                    }
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity).padding(.vertical, 18)
+                    .background(Color.white)
+                    .clipShape(Capsule())
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
+            .background(Theme.Colors.surface) // Solid background so it sits cleanly
+            .ignoresSafeArea(.keyboard, edges: .bottom)
         }
         .background(Theme.Colors.surface.ignoresSafeArea())
         .onAppear {
@@ -293,17 +428,50 @@ struct TableLoggerView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 if focusedField == .weight {
+                    HStack(spacing: 6) {
+                        Text("2x").font(.system(size: 12, weight: .black)).foregroundColor(.gray)
+                        ForEach([25, 35, 45], id: \.self) { p in
+                            Button("+\(p)") {
+                                let cur = Double(weightInput) ?? 0.0
+                                weightInput = String(format: "%.1f", cur + Double(p * 2)).replacingOccurrences(of: ".0", with: "")
+                            }
+                            .font(.system(size: 14, weight: .black)).foregroundColor(.white)
+                            .padding(.horizontal, 8).padding(.vertical, 6)
+                            .background(Theme.Colors.surfaceContainerHighest).clipShape(Capsule())
+                        }
+                    }
                     Spacer()
                     Button(action: { focusedField = .reps }) {
-                        Text("Next (Reps)").font(.system(size: 16, weight: .bold))
+                        HStack(spacing: 4) {
+                            Text("Next: Reps").font(.system(size: 14, weight: .black))
+                            Image(systemName: "arrow.right.circle.fill")
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Theme.Colors.primary)
+                        .clipShape(Capsule())
                     }
                 } else if focusedField == .reps {
                     Button(action: { focusedField = .weight }) {
-                        HStack { Image(systemName: "chevron.left"); Text("Weight") }
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.left.circle.fill")
+                            Text("Weight").font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Theme.Colors.surfaceContainerHigh)
+                        .clipShape(Capsule())
                     }
                     Spacer()
                     Button(action: logSet) {
-                        Text("Log Set").font(.system(size: 16, weight: .bold)).foregroundColor(.green)
+                        HStack(spacing: 4) {
+                            Text("LOG SET").font(.system(size: 14, weight: .black))
+                            Image(systemName: "checkmark.circle.fill")
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Color(hex: "#30D158"))
+                        .clipShape(Capsule())
                     }.disabled(weightInput.isEmpty || repsInput.isEmpty)
                 }
             }
