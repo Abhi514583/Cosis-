@@ -71,7 +71,7 @@ struct ContentView: View {
                 .environmentObject(dataManager)
         }
         .fullScreenCover(isPresented: $isStartingWorkout) {
-            WorkoutSessionView(initialExercise: initialExercise)
+            WorkoutSessionView(sessionDate: selectedDate, initialExercise: initialExercise)
                 .environmentObject(dataManager)
                 .onDisappear {
                     initialExercise = nil // Reset state when logger closes

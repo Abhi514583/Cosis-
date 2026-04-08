@@ -3,7 +3,7 @@ import SwiftUI
 public struct HomeWorkoutLogView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @Binding var selectedDate: Date
-    var onQuickLog: ((Exercise) -> Void)? = nil
+    var onQuickLog: ((Exercise?) -> Void)? = nil
     
     @State private var dotOffset: CGSize = .zero
     @AppStorage("userName") private var userName: String = "Abhi's"
@@ -203,7 +203,7 @@ public struct HomeWorkoutLogView: View {
 // Subview for the daily log content
 struct DailyLogView: View {
     let date: Date
-    var onQuickLog: ((Exercise) -> Void)? = nil
+    var onQuickLog: ((Exercise?) -> Void)? = nil
     @EnvironmentObject var dataManager: WorkoutDataManager
     @State private var isExerciseListVisible = false
     
@@ -227,10 +227,9 @@ struct DailyLogView: View {
     }
     
     private var displayWorkouts: [(name: String, sets: [WorkoutSet])] {
-        let isToday = Calendar.current.isDateInToday(date)
         var merged = dailyWorkouts
         
-        if isToday, let session = dataManager.activeSession {
+        if let session = dataManager.session(for: date) {
             var activeExerciseNames = Set<String>()
             
             // Override templated exercises with logged ones
@@ -238,8 +237,6 @@ struct DailyLogView: View {
                 if let activeLog = session.exerciseLogs.first(where: { $0.exercise.name == merged[i].name }) {
                     merged[i].sets = activeLog.sets
                     activeExerciseNames.insert(merged[i].name)
-                } else {
-                    merged[i].sets = [] // Show empty if not started
                 }
             }
             
@@ -296,12 +293,18 @@ struct DailyLogView: View {
                             WorkoutLogCard(exerciseName: workout.name, sets: workout.sets)
                                 .contentShape(Rectangle())
                                 .onTapGesture {
-                                    if let ex = dataManager.exerciseLibrary.first(where: { $0.name == workout.name }) {
-                                        onQuickLog?(ex)
-                                    } else {
-                                        let fallback = Exercise(name: workout.name, musclePartName: "CUSTOM")
-                                        onQuickLog?(fallback)
+                                    let fallback = Exercise(name: workout.name, musclePartName: "CUSTOM")
+                                    var resolvedEx = dataManager.exerciseLibrary.first(where: { $0.name == workout.name }) ?? fallback
+                                    
+                                    // Inject dummy/routine sets so the Logger "oddler" and autobox prefill them
+                                    if !workout.sets.isEmpty {
+                                        resolvedEx.previousSets = workout.sets
+                                        // For the PR module to show the max weight of the routine
+                                        if let maxW = workout.sets.map({ $0.weight }).max(), resolvedEx.maxWeight == 0 {
+                                            resolvedEx.maxWeight = maxW
+                                        }
                                     }
+                                    onQuickLog?(resolvedEx)
                                 }
                         }
                     }.padding(.top, 8)

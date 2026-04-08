@@ -12,8 +12,10 @@ public struct WorkoutSessionView: View {
     
     @State private var phase: SessionPhase = .overview
     @State private var selectedMuscle: MusclePart?
+    let sessionDate: Date
     
-    public init(initialExercise: Exercise? = nil) {
+    public init(sessionDate: Date = Date(), initialExercise: Exercise? = nil) {
+        self.sessionDate = sessionDate
         if let ex = initialExercise {
             _phase = State(initialValue: .logging(ex))
         }
@@ -26,9 +28,9 @@ public struct WorkoutSessionView: View {
             switch phase {
             case .overview:
                 ActiveWorkoutOverviewView(
+                    sessionDate: sessionDate,
                     onAddExercise: { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .selection } },
                     onFinish: {
-                        dataManager.activeSession = nil
                         dismiss()
                     },
                     onResumeExercise: { ex in 
@@ -44,13 +46,15 @@ public struct WorkoutSessionView: View {
             case .logging(let ex):
                 TableLoggerView(
                     exercise: ex,
+                    sessionDate: sessionDate,
                     onBack: { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .overview } }
                 )
             }
         }
         .onAppear {
-            if dataManager.activeSession == nil {
-                dataManager.activeSession = ActiveWorkoutSession(date: Date(), exerciseLogs: [])
+            if dataManager.session(for: sessionDate) == nil {
+                let initialSession = ActiveWorkoutSession(date: sessionDate, exerciseLogs: [])
+                dataManager.saveSession(initialSession, for: sessionDate)
             }
         }
     }
@@ -60,6 +64,7 @@ public struct WorkoutSessionView: View {
 
 struct ActiveWorkoutOverviewView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
+    let sessionDate: Date
     let onAddExercise: () -> Void
     let onFinish: () -> Void
     let onResumeExercise: (Exercise) -> Void
@@ -79,7 +84,7 @@ struct ActiveWorkoutOverviewView: View {
             
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 16) {
-                    if let session = dataManager.activeSession, !session.exerciseLogs.isEmpty {
+                    if let session = dataManager.session(for: sessionDate), !session.exerciseLogs.isEmpty {
                         ForEach(session.exerciseLogs) { log in
                             PaintedLogCard(log: log)
                                 .onTapGesture {
@@ -283,6 +288,7 @@ struct CreateCustomExerciseSheet: View {
 
 struct TableLoggerView: View {
     let exercise: Exercise
+    let sessionDate: Date
     let onBack: () -> Void
     @EnvironmentObject var dataManager: WorkoutDataManager
     
@@ -356,7 +362,7 @@ struct TableLoggerView: View {
                         Divider().background(Color.white.opacity(0.1)).padding(.horizontal, 24)
                         
                         // Data Rows
-                        if let log = dataManager.activeSession?.exerciseLogs.first(where: { $0.exercise.id == exercise.id }) {
+                        if let log = dataManager.session(for: sessionDate)?.exerciseLogs.first(where: { $0.exercise.id == exercise.id }) {
                             ForEach(log.sets) { s in
                                 HStack {
                                     Text("\(s.setNumber)").frame(width: 40, alignment: .center).font(.system(size: 14, weight: .black)).foregroundColor(.white)
@@ -373,7 +379,7 @@ struct TableLoggerView: View {
                         }
                         
                         // Active Input Row
-                        let nextSetNum = (dataManager.activeSession?.exerciseLogs.first(where: { $0.exercise.id == exercise.id })?.sets.last?.setNumber ?? 0) + 1
+                        let nextSetNum = (dataManager.session(for: sessionDate)?.exerciseLogs.first(where: { $0.exercise.id == exercise.id })?.sets.last?.setNumber ?? 0) + 1
                         
                         HStack {
                             Text("\(nextSetNum)").frame(width: 40, alignment: .center).font(.system(size: 14, weight: .black)).foregroundColor(.white)
@@ -422,8 +428,10 @@ struct TableLoggerView: View {
         }
         .background(Theme.Colors.surface.ignoresSafeArea())
         .onAppear {
-            focusedField = .weight
             populatePrevious()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                focusedField = .weight
+            }
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -487,7 +495,7 @@ struct TableLoggerView: View {
     }
     
     private func populatePrevious() {
-        let nextSetNum = (dataManager.activeSession?.exerciseLogs.first(where: { $0.exercise.id == exercise.id })?.sets.last?.setNumber ?? 0) + 1
+        let nextSetNum = (dataManager.session(for: sessionDate)?.exerciseLogs.first(where: { $0.exercise.id == exercise.id })?.sets.last?.setNumber ?? 0) + 1
         if nextSetNum - 1 < exercise.previousSets.count {
             weightInput = String(format: "%.1f", exercise.previousSets[nextSetNum - 1].weight).replacingOccurrences(of: ".0", with: "")
         }
@@ -496,14 +504,16 @@ struct TableLoggerView: View {
     private func logSet() {
         guard let w = Double(weightInput), let r = Int(repsInput) else { return }
         
-        if dataManager.activeSession == nil { dataManager.activeSession = ActiveWorkoutSession(date: Date(), exerciseLogs: []) }
+        var currentSession = dataManager.session(for: sessionDate) ?? ActiveWorkoutSession(date: sessionDate, exerciseLogs: [])
         
-        if let idx = dataManager.activeSession?.exerciseLogs.firstIndex(where: { $0.exercise.id == exercise.id }) {
-            let n = (dataManager.activeSession?.exerciseLogs[idx].sets.last?.setNumber ?? 0) + 1
-            dataManager.activeSession?.exerciseLogs[idx].sets.append(WorkoutSet(setNumber: n, reps: r, weight: w))
+        if let idx = currentSession.exerciseLogs.firstIndex(where: { $0.exercise.id == exercise.id }) {
+            let n = (currentSession.exerciseLogs[idx].sets.last?.setNumber ?? 0) + 1
+            currentSession.exerciseLogs[idx].sets.append(WorkoutSet(setNumber: n, reps: r, weight: w))
         } else {
-            dataManager.activeSession?.exerciseLogs.append(ExerciseLog(exercise: exercise, sets: [WorkoutSet(setNumber: 1, reps: r, weight: w)], unit: dataManager.weightUnit))
+            currentSession.exerciseLogs.append(ExerciseLog(exercise: exercise, sets: [WorkoutSet(setNumber: 1, reps: r, weight: w)], unit: dataManager.weightUnit))
         }
+        
+        dataManager.saveSession(currentSession, for: sessionDate)
         
         repsInput = ""
         focusedField = .weight

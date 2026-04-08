@@ -81,7 +81,21 @@ public class WorkoutDataManager: ObservableObject {
         4: [MusclePart(name: "LEGS", color: Color(hex: "#FF9F0A"), icon: "flame.fill")]
     ]
     
-    @Published public var activeSession: ActiveWorkoutSession? = nil
+    @Published public var sessions: [String: ActiveWorkoutSession] = [:]
+    
+    public func session(for date: Date) -> ActiveWorkoutSession? {
+        return sessions[dateKey(date)]
+    }
+    
+    public func saveSession(_ session: ActiveWorkoutSession, for date: Date) {
+        sessions[dateKey(date)] = session
+    }
+    
+    public func dateKey(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
     
     // Theme Customization
     @Published public var primaryColor: Color = Color(hex: "#C4524D") // Crimson
