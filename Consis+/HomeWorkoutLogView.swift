@@ -294,6 +294,7 @@ struct DailyLogView: View {
                     VStack(spacing: 12) {
                         ForEach(displayWorkouts, id: \.name) { workout in
                             WorkoutLogCard(exerciseName: workout.name, sets: workout.sets)
+                                .contentShape(Rectangle())
                                 .onTapGesture {
                                     if let ex = dataManager.exerciseLibrary.first(where: { $0.name == workout.name }) {
                                         onQuickLog?(ex)
