@@ -143,6 +143,21 @@ public class WorkoutDataManager: ObservableObject {
         Exercise(name: "Cycling", musclePartName: "CARDIO", usageCount: 20, maxWeight: 0, lastPerformance: "10km in 20min")
     ]
     
+    public func routineExercises(for date: Date) -> [(name: String, sets: [WorkoutSet])] {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: date)
+        switch weekday {
+        case 2, 5: return [
+            ("Barbell Bench Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 135), WorkoutSet(setNumber: 2, reps: 6, weight: 155)]),
+            ("Incline Dumbbell Press", [WorkoutSet(setNumber: 1, reps: 10, weight: 65)])
+        ]
+        case 3: return [("Deadlift", [WorkoutSet(setNumber: 1, reps: 5, weight: 225)]), ("Pull-ups", [WorkoutSet(setNumber: 1, reps: 12, weight: 0)])]
+        case 4, 7: return [("Squats", [WorkoutSet(setNumber: 1, reps: 10, weight: 185)]), ("Leg Press", [WorkoutSet(setNumber: 1, reps: 15, weight: 360)])]
+        case 6: return [("Overhead Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 95)]), ("Bicep Curls", [WorkoutSet(setNumber: 1, reps: 12, weight: 35)])]
+        default: return []
+        }
+    }
+    
     public init() {}
     
     public func parts(for date: Date) -> [MusclePart] {

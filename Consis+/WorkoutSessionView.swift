@@ -13,6 +13,7 @@ public struct WorkoutSessionView: View {
     @State private var phase: SessionPhase = .overview
     @State private var selectedMuscle: MusclePart?
     let sessionDate: Date
+    @FocusState private var focusedField: TableLoggerView.Field?
     
     public init(sessionDate: Date = Date(), initialExercise: Exercise? = nil) {
         self.sessionDate = sessionDate
@@ -40,15 +41,84 @@ public struct WorkoutSessionView: View {
             case .selection:
                 ExerciseSelectionFeedView(
                     selectedMuscle: $selectedMuscle,
-                    onSelect: { ex in withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .logging(ex) } },
-                    onClose: { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .overview } }
+                    onSelect: { ex in 
+                        focusedField = nil
+                        var resolvedEx = ex
+                        // Check if this exercise is in today's routine to inject template data
+                        let routine = dataManager.routineExercises(for: sessionDate)
+                        if let plan = routine.first(where: { $0.name == ex.name }) {
+                            resolvedEx.previousSets = plan.sets
+                        }
+                        
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .logging(resolvedEx) } 
+                    },
+                    onClose: { 
+                        focusedField = nil
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .overview } 
+                    }
                 )
             case .logging(let ex):
                 TableLoggerView(
                     exercise: ex,
                     sessionDate: sessionDate,
-                    onBack: { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .overview } }
+                    focusedField: $focusedField,
+                    onBack: { 
+                        focusedField = nil
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .overview } 
+                    }
                 )
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        if focusedField == .weight {
+                            HStack(spacing: 6) {
+                                Text("2x").font(.system(size: 12, weight: .black)).foregroundColor(.gray)
+                                ForEach([25, 35, 45], id: \.self) { p in
+                                    Button("+\(p)") {
+                                        NotificationCenter.default.post(name: Notification.Name("AddWeight"), object: nil, userInfo: ["amount": p])
+                                    }
+                                    .font(.system(size: 14, weight: .black)).foregroundColor(.white)
+                                    .padding(.horizontal, 8).padding(.vertical, 6)
+                                    .background(Theme.Colors.surfaceContainerHighest).clipShape(Capsule())
+                                }
+                            }
+                            Spacer()
+                            Button(action: { focusedField = .reps }) {
+                                HStack(spacing: 4) {
+                                    Text("Next: Reps").font(.system(size: 14, weight: .black))
+                                    Image(systemName: "arrow.right.circle.fill")
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(Theme.Colors.primary)
+                                .clipShape(Capsule())
+                            }
+                        } else if focusedField == .reps {
+                            Button(action: { focusedField = .weight }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.left.circle.fill")
+                                    Text("Weight").font(.system(size: 14, weight: .bold))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(Theme.Colors.surfaceContainerHigh)
+                                .clipShape(Capsule())
+                            }
+                            Spacer()
+                            Button(action: {
+                                NotificationCenter.default.post(name: Notification.Name("LogSet"), object: nil)
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text("LOG SET").font(.system(size: 14, weight: .black))
+                                    Image(systemName: "checkmark.circle.fill")
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(Color(hex: "#30D158"))
+                                .clipShape(Capsule())
+                            }
+                        }
+                    }
+                }
             }
         }
         .onAppear {
@@ -84,11 +154,43 @@ struct ActiveWorkoutOverviewView: View {
             
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 16) {
-                    if let session = dataManager.session(for: sessionDate), !session.exerciseLogs.isEmpty {
-                        ForEach(session.exerciseLogs) { log in
-                            PaintedLogCard(log: log)
+                    let routine = dataManager.routineExercises(for: sessionDate)
+                    let session = dataManager.session(for: sessionDate) ?? ActiveWorkoutSession(date: sessionDate, exerciseLogs: [])
+                    
+                    // Merge routine with actual logs
+                    let displayItems: [(name: String, sets: [WorkoutSet], isLogged: Bool)] = {
+                        var items: [(name: String, sets: [WorkoutSet], isLogged: Bool)] = []
+                        var loggedNames = Set<String>()
+                        
+                        // First, add all logged exercises
+                        for log in session.exerciseLogs {
+                            items.append((name: log.exercise.name, sets: log.sets, isLogged: true))
+                            loggedNames.insert(log.exercise.name)
+                        }
+                        
+                        // Then add planned exercises from routine that haven't been logged yet
+                        for plan in routine {
+                            if !loggedNames.contains(plan.name) {
+                                items.append((name: plan.name, sets: plan.sets, isLogged: false))
+                            }
+                        }
+                        return items
+                    }()
+                    
+                    if !displayItems.isEmpty {
+                        ForEach(displayItems, id: \.name) { item in
+                            PaintedLogCard(name: item.name, sets: item.sets, isLogged: item.isLogged)
                                 .onTapGesture {
-                                    onResumeExercise(log.exercise)
+                                    // Resolve exercise from library or create fallback
+                                    let fallback = Exercise(name: item.name, musclePartName: "CUSTOM")
+                                    var resolvedEx = dataManager.exerciseLibrary.first(where: { $0.name == item.name }) ?? fallback
+                                    
+                                    if !item.isLogged {
+                                        // Inject template sets into previousSets so logger pre-fills
+                                        resolvedEx.previousSets = item.sets
+                                    }
+                                    
+                                    onResumeExercise(resolvedEx)
                                 }
                         }
                     } else {
@@ -135,34 +237,41 @@ struct ActiveWorkoutOverviewView: View {
 }
 
 struct PaintedLogCard: View {
-    let log: ExerciseLog
+    let name: String
+    let sets: [WorkoutSet]
+    let isLogged: Bool
+    
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(log.exercise.name).font(.system(size: 18, weight: .black, design: .rounded)).foregroundColor(.white)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(name).font(.system(size: 18, weight: .black, design: .rounded)).foregroundColor(.white)
+                    if !isLogged {
+                        Text("PLANNED").font(.system(size: 10, weight: .bold)).foregroundColor(Theme.Colors.primary).padding(.horizontal, 6).padding(.vertical, 2).background(Theme.Colors.primary.opacity(0.2)).clipShape(Capsule())
+                    }
+                }
                 Spacer()
-                Text("\(log.sets.count) SETS").font(.system(size: 12, weight: .bold)).foregroundColor(.white.opacity(0.7))
+                Text("\(sets.count) SETS").font(.system(size: 12, weight: .bold)).foregroundColor(.white.opacity(0.7))
             }
             .padding(20)
-            .background(Color.white.opacity(0.1))
+            .background(Color.white.opacity(isLogged ? 0.1 : 0.05))
             
-            if !log.sets.isEmpty {
+            if !sets.isEmpty {
                 VStack(spacing: 6) {
-                    ForEach(log.sets) { s in
+                    ForEach(sets) { s in
                         HStack {
                             Text("\(s.setNumber)").font(.system(size: 12, weight: .black)).foregroundColor(.white.opacity(0.5)).frame(width: 30, alignment: .leading)
-                            Text("\(String(format: "%.1f", s.weight)) \(log.unit.rawValue)").font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                            Text("\(String(format: "%.1f", s.weight)) KG").font(.system(size: 14, weight: .bold)).foregroundColor(.white.opacity(isLogged ? 1.0 : 0.4))
                             Spacer()
-                            Text("\(s.reps) reps").font(.system(size: 14, weight: .bold)).foregroundColor(.white.opacity(0.5))
+                            Text("\(s.reps) reps").font(.system(size: 14, weight: .bold)).foregroundColor(.white.opacity(isLogged ? 0.5 : 0.2))
                         }.padding(.horizontal, 20).padding(.vertical, 6)
                     }
                 }.padding(.bottom, 16).padding(.top, 8)
             }
         }
-        .background(Theme.Colors.surfaceContainerHigh)
+        .background(Theme.Colors.surfaceContainerHigh.opacity(isLogged ? 1.0 : 0.6))
         .clipShape(RoundedRectangle(cornerRadius: 24))
-        // Paint it subtly with muscle color (defaulting to primary if we don't have the color easily accessible here)
-        .overlay(RoundedRectangle(cornerRadius: 24).stroke(Theme.Colors.primary.opacity(0.3), lineWidth: 2))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(isLogged ? Theme.Colors.primary.opacity(0.3) : Color.white.opacity(0.1), lineWidth: 2))
     }
 }
 
@@ -289,12 +398,13 @@ struct CreateCustomExerciseSheet: View {
 struct TableLoggerView: View {
     let exercise: Exercise
     let sessionDate: Date
+    @FocusState.Binding var focusedField: Field?
     let onBack: () -> Void
     @EnvironmentObject var dataManager: WorkoutDataManager
     
     @State private var weightInput: String = ""
     @State private var repsInput: String = ""
-    @FocusState private var focusedField: Field?
+    
     enum Field { case weight, reps }
     
     var body: some View {
@@ -429,60 +539,27 @@ struct TableLoggerView: View {
         .background(Theme.Colors.surface.ignoresSafeArea())
         .onAppear {
             populatePrevious()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                focusedField = .weight
-            }
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                if focusedField == .weight {
-                    HStack(spacing: 6) {
-                        Text("2x").font(.system(size: 12, weight: .black)).foregroundColor(.gray)
-                        ForEach([25, 35, 45], id: \.self) { p in
-                            Button("+\(p)") {
-                                let cur = Double(weightInput) ?? 0.0
-                                weightInput = String(format: "%.1f", cur + Double(p * 2)).replacingOccurrences(of: ".0", with: "")
-                            }
-                            .font(.system(size: 14, weight: .black)).foregroundColor(.white)
-                            .padding(.horizontal, 8).padding(.vertical, 6)
-                            .background(Theme.Colors.surfaceContainerHighest).clipShape(Capsule())
-                        }
-                    }
-                    Spacer()
-                    Button(action: { focusedField = .reps }) {
-                        HStack(spacing: 4) {
-                            Text("Next: Reps").font(.system(size: 14, weight: .black))
-                            Image(systemName: "arrow.right.circle.fill")
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Theme.Colors.primary)
-                        .clipShape(Capsule())
-                    }
-                } else if focusedField == .reps {
-                    Button(action: { focusedField = .weight }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.left.circle.fill")
-                            Text("Weight").font(.system(size: 14, weight: .bold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Theme.Colors.surfaceContainerHigh)
-                        .clipShape(Capsule())
-                    }
-                    Spacer()
-                    Button(action: logSet) {
-                        HStack(spacing: 4) {
-                            Text("LOG SET").font(.system(size: 14, weight: .black))
-                            Image(systemName: "checkmark.circle.fill")
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Color(hex: "#30D158"))
-                        .clipShape(Capsule())
-                    }.disabled(weightInput.isEmpty || repsInput.isEmpty)
+            // Reset focus first to ensure the transition doesn't confuse the keyboard manager
+            focusedField = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if weightInput.isEmpty {
+                    focusedField = .weight
+                } else {
+                    focusedField = .reps
                 }
             }
+        }
+        .onDisappear {
+            focusedField = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("AddWeight"))) { note in
+            if let amount = note.userInfo?["amount"] as? Int {
+                let cur = Double(weightInput) ?? 0.0
+                weightInput = String(format: "%.1f", cur + Double(amount * 2)).replacingOccurrences(of: ".0", with: "")
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LogSet"))) { _ in
+            logSet()
         }
     }
     
@@ -495,9 +572,24 @@ struct TableLoggerView: View {
     }
     
     private func populatePrevious() {
-        let nextSetNum = (dataManager.session(for: sessionDate)?.exerciseLogs.first(where: { $0.exercise.id == exercise.id })?.sets.last?.setNumber ?? 0) + 1
+        let loggedSets = dataManager.session(for: sessionDate)?.exerciseLogs.first(where: { $0.exercise.id == exercise.id })?.sets ?? []
+        let nextSetNum = (loggedSets.last?.setNumber ?? 0) + 1
+        
+        var suggestedW: Double? = nil
+        
         if nextSetNum - 1 < exercise.previousSets.count {
-            weightInput = String(format: "%.1f", exercise.previousSets[nextSetNum - 1].weight).replacingOccurrences(of: ".0", with: "")
+            suggestedW = exercise.previousSets[nextSetNum - 1].weight
+        } else if let lastLogged = loggedSets.last {
+            // Carry over the weight from the most recent set logged TODAY
+            suggestedW = lastLogged.weight
+        }
+        
+        if let w = suggestedW {
+            if w > 0 {
+                weightInput = String(format: "%.1f", w).replacingOccurrences(of: ".0", with: "")
+            } else {
+                weightInput = "" // Clear for bodyweight
+            }
         }
     }
     
