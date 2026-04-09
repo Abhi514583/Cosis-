@@ -13,19 +13,23 @@ public enum SuggestionType: Int, CaseIterable {
         }
     }
     
-    func calculateWeight(base: Double) -> Double {
+    func calculateWeight(base: Double, unit: WeightUnit) -> Double {
         switch self {
         case .pr: return base
-        case .overload: return base + 2.5 // Add 2.5kg
+        case .overload: 
+            // 2.5kg jump or 5lb jump
+            return base + (unit == .kg ? 2.5 : 5.0)
         case .deload: return base * 0.90 // -10%
         }
     }
 }
 
 public struct SuggestionPill: View {
+
     let baseWeight: Double
     let baseReps: Int
     var onTap: ((Double, Int) -> Void)? = nil
+    @EnvironmentObject var dataManager: WorkoutDataManager
     
     @State private var currentIndex: Int = 0
     @State private var dragOffset: CGFloat = .zero
@@ -43,7 +47,7 @@ public struct SuggestionPill: View {
     }
     
     private var displayWeight: Double {
-        currentType.calculateWeight(base: baseWeight)
+        currentType.calculateWeight(base: baseWeight, unit: dataManager.weightUnit)
     }
     
     // Simplistic logic to vary reps or just keep them same
@@ -67,9 +71,14 @@ public struct SuggestionPill: View {
                     Text(currentType.title)
                         .font(.system(size: 12, weight: .black, design: .rounded))
                     
-                    Text("\(displayWeight, specifier: "%.1f") × \(displayReps)")
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(displayWeight, specifier: "%.1f")")
                         .font(.system(size: 16, weight: .heavy, design: .rounded))
                         .contentTransition(.numericText())
+                    
+                    Text("\(dataManager.weightUnit.rawValue) × \(displayReps)")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                }
                 }
                 .foregroundColor(.white)
                 
@@ -152,4 +161,5 @@ public struct SuggestionPill: View {
     }
     .padding()
     .background(Theme.Colors.surfaceContainerLow)
+    .environmentObject(WorkoutDataManager())
 }

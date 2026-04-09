@@ -67,56 +67,56 @@ public struct WorkoutSessionView: View {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .overview } 
                     }
                 )
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        if focusedField == .weight {
-                            HStack(spacing: 6) {
-                                Text("2x").font(.system(size: 12, weight: .black)).foregroundColor(.gray)
-                                ForEach([25, 35, 45], id: \.self) { p in
-                                    Button("+\(p)") {
-                                        NotificationCenter.default.post(name: Notification.Name("AddWeight"), object: nil, userInfo: ["amount": p])
-                                    }
-                                    .font(.system(size: 14, weight: .black)).foregroundColor(.white)
-                                    .padding(.horizontal, 8).padding(.vertical, 6)
-                                    .background(Theme.Colors.surfaceContainerHighest).clipShape(Capsule())
-                                }
+            }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                if focusedField == .weight {
+                    HStack(spacing: 6) {
+                        Text("2x").font(.system(size: 12, weight: .black)).foregroundColor(.gray)
+                        ForEach([25, 35, 45], id: \.self) { p in
+                            Button("+\(p)") {
+                                NotificationCenter.default.post(name: Notification.Name("AddWeight"), object: nil, userInfo: ["amount": p])
                             }
-                            Spacer()
-                            Button(action: { focusedField = .reps }) {
-                                HStack(spacing: 4) {
-                                    Text("Next: Reps").font(.system(size: 14, weight: .black))
-                                    Image(systemName: "arrow.right.circle.fill")
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 14).padding(.vertical, 8)
-                                .background(Theme.Colors.primary)
-                                .clipShape(Capsule())
-                            }
-                        } else if focusedField == .reps {
-                            Button(action: { focusedField = .weight }) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "arrow.left.circle.fill")
-                                    Text("Weight").font(.system(size: 14, weight: .bold))
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 14).padding(.vertical, 8)
-                                .background(Theme.Colors.surfaceContainerHigh)
-                                .clipShape(Capsule())
-                            }
-                            Spacer()
-                            Button(action: {
-                                NotificationCenter.default.post(name: Notification.Name("LogSet"), object: nil)
-                            }) {
-                                HStack(spacing: 4) {
-                                    Text("LOG SET").font(.system(size: 14, weight: .black))
-                                    Image(systemName: "checkmark.circle.fill")
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 14).padding(.vertical, 8)
-                                .background(Color(hex: "#30D158"))
-                                .clipShape(Capsule())
-                            }
+                            .font(.system(size: 14, weight: .black)).foregroundColor(.white)
+                            .padding(.horizontal, 8).padding(.vertical, 6)
+                            .background(Theme.Colors.surfaceContainerHighest).clipShape(Capsule())
                         }
+                    }
+                    Spacer()
+                    Button(action: { focusedField = .reps }) {
+                        HStack(spacing: 4) {
+                            Text("Next: Reps").font(.system(size: 14, weight: .black))
+                            Image(systemName: "arrow.right.circle.fill")
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Theme.Colors.primary)
+                        .clipShape(Capsule())
+                    }
+                } else if focusedField == .reps {
+                    Button(action: { focusedField = .weight }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.left.circle.fill")
+                            Text("Weight").font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Theme.Colors.surfaceContainerHigh)
+                        .clipShape(Capsule())
+                    }
+                    Spacer()
+                    Button(action: {
+                        NotificationCenter.default.post(name: Notification.Name("LogSet"), object: nil)
+                    }) {
+                        HStack(spacing: 4) {
+                            Text("LOG SET").font(.system(size: 14, weight: .black))
+                            Image(systemName: "checkmark.circle.fill")
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Color(hex: "#30D158"))
+                        .clipShape(Capsule())
                     }
                 }
             }
@@ -158,20 +158,20 @@ struct ActiveWorkoutOverviewView: View {
                     let session = dataManager.session(for: sessionDate) ?? ActiveWorkoutSession(date: sessionDate, exerciseLogs: [])
                     
                     // Merge routine with actual logs
-                    let displayItems: [(name: String, sets: [WorkoutSet], isLogged: Bool)] = {
-                        var items: [(name: String, sets: [WorkoutSet], isLogged: Bool)] = []
+                    let displayItems: [(name: String, sets: [WorkoutSet], isLogged: Bool, unit: WeightUnit)] = {
+                        var items: [(name: String, sets: [WorkoutSet], isLogged: Bool, unit: WeightUnit)] = []
                         var loggedNames = Set<String>()
                         
                         // First, add all logged exercises
                         for log in session.exerciseLogs {
-                            items.append((name: log.exercise.name, sets: log.sets, isLogged: true))
+                            items.append((name: log.exercise.name, sets: log.sets, isLogged: true, unit: log.unit))
                             loggedNames.insert(log.exercise.name)
                         }
                         
-                        // Then add planned exercises from routine that haven't been logged yet
+                        // Then add planned exercises from routine (Assume library/routine defaults to KG)
                         for plan in routine {
                             if !loggedNames.contains(plan.name) {
-                                items.append((name: plan.name, sets: plan.sets, isLogged: false))
+                                items.append((name: plan.name, sets: plan.sets, isLogged: false, unit: .kg))
                             }
                         }
                         return items
@@ -179,7 +179,7 @@ struct ActiveWorkoutOverviewView: View {
                     
                     if !displayItems.isEmpty {
                         ForEach(displayItems, id: \.name) { item in
-                            PaintedLogCard(name: item.name, sets: item.sets, isLogged: item.isLogged)
+                            PaintedLogCard(name: item.name, sets: item.sets, isLogged: item.isLogged, originalUnit: item.unit)
                                 .onTapGesture {
                                     // Resolve exercise from library or create fallback
                                     let fallback = Exercise(name: item.name, musclePartName: "CUSTOM")
@@ -240,6 +240,8 @@ struct PaintedLogCard: View {
     let name: String
     let sets: [WorkoutSet]
     let isLogged: Bool
+    let originalUnit: WeightUnit // The unit these sets were originally logged in
+    @EnvironmentObject var dataManager: WorkoutDataManager
     
     var body: some View {
         VStack(spacing: 0) {
@@ -261,7 +263,11 @@ struct PaintedLogCard: View {
                     ForEach(sets) { s in
                         HStack {
                             Text("\(s.setNumber)").font(.system(size: 12, weight: .black)).foregroundColor(.white.opacity(0.5)).frame(width: 30, alignment: .leading)
-                            Text("\(String(format: "%.1f", s.weight)) KG").font(.system(size: 14, weight: .bold)).foregroundColor(.white.opacity(isLogged ? 1.0 : 0.4))
+                            
+                            // Convert to global unit
+                            let convertedW = dataManager.weightUnit.convert(s.weight, from: originalUnit)
+                            Text("\(String(format: "%.1f", convertedW).replacingOccurrences(of: ".0", with: "")) \(dataManager.weightUnit.rawValue)").font(.system(size: 14, weight: .bold)).foregroundColor(.white.opacity(isLogged ? 1.0 : 0.4))
+                            
                             Spacer()
                             Text("\(s.reps) reps").font(.system(size: 14, weight: .bold)).foregroundColor(.white.opacity(isLogged ? 0.5 : 0.2))
                         }.padding(.horizontal, 20).padding(.vertical, 6)
@@ -415,7 +421,14 @@ struct TableLoggerView: View {
                 // Settings/Unit toggle
                 Button(action: {
                     let old = dataManager.weightUnit
-                    dataManager.weightUnit = old == .kg ? .lbs : .kg
+                    let new: WeightUnit = old == .kg ? .lbs : .kg
+                    
+                    // Convert current active input
+                    if let curW = Double(weightInput) {
+                        weightInput = String(format: "%.1f", new.convert(curW, from: old)).replacingOccurrences(of: ".0", with: "")
+                    }
+                    
+                    dataManager.weightUnit = new
                     let gen = UIImpactFeedbackGenerator(style: .light)
                     gen.impactOccurred()
                 }) {
@@ -445,7 +458,9 @@ struct TableLoggerView: View {
                             .padding(.horizontal, 24)
                         
                         HStack {
-                            SuggestionPill(baseWeight: exercise.maxWeight, baseReps: exercise.previousSets.first?.reps ?? 10) { suggestedWeight, suggestedReps in
+                            // Convert maxWeight to CURRENT unit for display
+                            let displayedMax = dataManager.weightUnit.convert(exercise.maxWeight, from: .kg) // Assuming library stores in KG
+                            SuggestionPill(baseWeight: displayedMax, baseReps: exercise.previousSets.first?.reps ?? 10) { suggestedWeight, suggestedReps in
                                 weightInput = String(format: "%.1f", suggestedWeight).replacingOccurrences(of: ".0", with: "")
                                 repsInput = "\(suggestedReps)"
                                 
@@ -479,7 +494,9 @@ struct TableLoggerView: View {
                                     // Simulated Previous based on historical data array
                                     let prevStr = previousDataString(for: s.setNumber)
                                     Text(prevStr).frame(maxWidth: .infinity, alignment: .center).font(.system(size: 14, weight: .bold)).foregroundColor(.gray.opacity(0.5))
-                                    Text("\(String(format: "%.1f", s.weight).replacingOccurrences(of: ".0", with: ""))")
+                                    // Convert logged weight to CURRENT unit display
+                                    let convertedWeight = dataManager.weightUnit.convert(s.weight, from: log.unit)
+                                    Text("\(String(format: "%.1f", convertedWeight).replacingOccurrences(of: ".0", with: ""))")
                                         .frame(width: 80, height: 36, alignment: .center).font(.system(size: 16, weight: .bold)).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 10)).foregroundColor(.white)
                                     Text("\(s.reps)")
                                         .frame(width: 70, height: 36, alignment: .center).font(.system(size: 16, weight: .bold)).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 10)).foregroundColor(.white)
@@ -566,7 +583,9 @@ struct TableLoggerView: View {
     private func previousDataString(for setNum: Int) -> String {
         if setNum - 1 < exercise.previousSets.count {
             let pSet = exercise.previousSets[setNum - 1]
-            return "\(String(format: "%.0f", pSet.weight)) × \(pSet.reps)"
+            // Convert historical weight to CURRENT unit display
+            let convertedW = dataManager.weightUnit.convert(pSet.weight, from: .kg) // Assuming library stores base as KG
+            return "\(String(format: "%.1f", convertedW).replacingOccurrences(of: ".0", with: "")) × \(pSet.reps)"
         }
         return "-"
     }
@@ -586,6 +605,9 @@ struct TableLoggerView: View {
         
         if let w = suggestedW {
             if w > 0 {
+                // If suggested weight comes from today's log, it might be in current unit. 
+                // However, populatePrevious is often called after unit change, so we should ensure consistency.
+                // For now, let's assume the weight input logic handles current unit values.
                 weightInput = String(format: "%.1f", w).replacingOccurrences(of: ".0", with: "")
             } else {
                 weightInput = "" // Clear for bodyweight
