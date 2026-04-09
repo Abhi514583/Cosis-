@@ -13,10 +13,11 @@ public struct HomeWorkoutLogView: View {
     @FocusState private var isNameFocused: Bool
     
     public var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Theme.Colors.surface.ignoresSafeArea()
-                
+        ZStack(alignment: .top) {
+            Theme.Colors.surface.ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // FIXED TOP SECTION (Header + Calendar Rail)
                 VStack(spacing: 0) {
                     // PINNED HEADER (DATE & HEART)
                     HStack(spacing: 12) {
@@ -31,7 +32,7 @@ public struct HomeWorkoutLogView: View {
                             .foregroundColor(dataManager.accentColor)
                             .shadow(color: dataManager.accentColor.opacity(0.8), radius: 12, x: 0, y: 0)
                             .shadow(color: dataManager.accentColor.opacity(0.4), radius: 20, x: 0, y: 0)
-                            .offset(x: dotOffset.width, y: 8 + dotOffset.height) 
+                            .offset(x: dotOffset.width, y: 8 + dotOffset.height)
                             .gesture(
                                 DragGesture()
                                     .onChanged { gesture in
@@ -40,7 +41,6 @@ public struct HomeWorkoutLogView: View {
                                     .onEnded { _ in
                                         let generator = UIImpactFeedbackGenerator(style: .medium)
                                         generator.impactOccurred()
-                                        
                                         withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
                                             dotOffset = .zero
                                         }
@@ -63,7 +63,6 @@ public struct HomeWorkoutLogView: View {
                                     .foregroundColor(dataManager.primaryColor)
                                     .multilineTextAlignment(.center)
                                     .lineLimit(1)
-                                
                                 Text("Logger")
                                     .font(.system(size: 14, weight: .bold, design: .rounded))
                                     .foregroundColor(Theme.Colors.onSurfaceVariant)
@@ -88,93 +87,91 @@ public struct HomeWorkoutLogView: View {
                     .padding(.horizontal, 24)
                     .padding(.vertical, 12)
                     .background(Theme.Colors.surface)
-                    .zIndex(1) 
                     
-                    // FIXED HORIZONTAL RAIL + PAGER SECTION
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 8) {
-                            DateRailView(selectedDate: $selectedDate)
-                                .padding(.top, 4)
-                            
-                            TabView(selection: $selectedDate) {
-                                ForEach(generateDateRange(), id: \.self) { date in
-                                    DailyLogView(date: date, onQuickLog: onQuickLog)
-                                        .tag(date)
+                    // Calendar rail immediately below header
+                    DateRailView(selectedDate: $selectedDate)
+                        .padding(.vertical, 4)
+                        .frame(height: 80) // Constrain vertical expansion explicitly
+                }
+                .fixedSize(horizontal: false, vertical: true) // GUARANTEES they do not stretch apart
+                .zIndex(10)
+                
+                // Page content fills remaining space below calendar
+                TabView(selection: $selectedDate) {
+                    ForEach(generateDateRange(), id: \.self) { date in
+                        DailyLogView(date: date, onQuickLog: onQuickLog)
+                            .tag(date)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: selectedDate)
+            
+            // Name Editing Glass Overlay
+            if isEditingName {
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring()) {
+                            userName = tempName.isEmpty ? "Abhi's" : tempName
+                            isEditingName = false
+                        }
+                        isNameFocused = false
+                    }
+                
+                VStack {
+                    HStack(spacing: 16) {
+                        TextField("Enter your name", text: $tempName)
+                            .focused($isNameFocused)
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.leading)
+                            .submitLabel(.done)
+                            .onSubmit {
+                                withAnimation(.spring()) {
+                                    userName = tempName.isEmpty ? "Abhi's" : tempName
+                                    isEditingName = false
                                 }
                             }
-                            .tabViewStyle(.page(indexDisplayMode: .never))
-                            .frame(height: geo.size.height * 0.82)
-                        }
-                    }
-                    .frame(height: geo.size.height * 0.90) 
-                }
-                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: selectedDate)
-                
-                // Name Editing Glass Overlay
-                if isEditingName {
-                    Color.black.opacity(0.6)
-                        .ignoresSafeArea()
-                        .onTapGesture {
+                        
+                        Button(action: {
+                            let generator = UIImpactFeedbackGenerator(style: .medium)
+                            generator.impactOccurred()
                             withAnimation(.spring()) {
                                 userName = tempName.isEmpty ? "Abhi's" : tempName
                                 isEditingName = false
                             }
                             isNameFocused = false
+                        }) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(dataManager.primaryColor)
                         }
-                    
-                    VStack {
-                        HStack(spacing: 16) {
-                            TextField("Enter your name", text: $tempName)
-                                .focused($isNameFocused)
-                                .font(.system(size: 22, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                                .multilineTextAlignment(.leading)
-                                .submitLabel(.done)
-                                .onSubmit {
-                                    withAnimation(.spring()) {
-                                        userName = tempName.isEmpty ? "Abhi's" : tempName
-                                        isEditingName = false
-                                    }
-                                }
-                            
-                            Button(action: {
-                                let generator = UIImpactFeedbackGenerator(style: .medium)
-                                generator.impactOccurred()
-                                withAnimation(.spring()) {
-                                    userName = tempName.isEmpty ? "Abhi's" : tempName
-                                    isEditingName = false
-                                }
-                                isNameFocused = false
-                            }) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 32))
-                                    .foregroundColor(dataManager.primaryColor)
-                            }
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 20)
-                        .background(
-                            RoundedRectangle(cornerRadius: 28)
-                                .fill(Theme.Colors.surfaceContainerHigh.opacity(0.7))
-                                .background(.ultraThinMaterial)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 28))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 28)
-                                .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                        )
-                        .shadow(color: .black.opacity(0.4), radius: 30, x: 0, y: 15)
-                        .padding(.horizontal, 24)
-                        
-                        Spacer()
                     }
-                    .padding(.top, 80)
-                    .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.9)))
-                    .zIndex(200)
-                    .onAppear {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            isNameFocused = true
-                        }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 28)
+                            .fill(Theme.Colors.surfaceContainerHigh.opacity(0.7))
+                            .background(.ultraThinMaterial)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 28))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 28)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.4), radius: 30, x: 0, y: 15)
+                    .padding(.horizontal, 24)
+                    
+                    Spacer()
+                }
+                .padding(.top, 80)
+                .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.9)))
+                .zIndex(200)
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isNameFocused = true
                     }
                 }
             }
@@ -249,68 +246,119 @@ struct DailyLogView: View {
         }
         return merged
     }
+    private var isCompleted: Bool {
+        if let session = dataManager.session(for: date), !session.exerciseLogs.isEmpty {
+            return true
+        }
+        return false
+    }
+    
+    private var cardAccentColor: Color {
+        isCompleted ? Theme.Colors.success : dataManager.primaryColor
+    }
 
     var body: some View {
-        VStack(spacing: 16) {
-            if dailyMuscleParts.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "cup.and.saucer.fill")
-                        .font(.system(size: 48))
-                        .foregroundColor(dataManager.primaryColor)
-                    Text("REST DAY").font(.system(size: 24, weight: .black, design: .rounded)).foregroundColor(.white)
-                    Text("Recovery is where the growth happens.").font(Typography.bodySmall).foregroundColor(Theme.Colors.onSurfaceVariant).multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity).frame(height: 300)
-                .background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 32)).padding(.horizontal, 24).padding(.top, 8)
-            } else {
-                Button(action: {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { isExerciseListVisible.toggle() }
-                }) {
-                    VStack(alignment: .leading, spacing: 20) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("TODAY'S FOCUS").technicalMicroCopy().foregroundColor(dataManager.primaryColor.opacity(0.8))
-                                Text(dailyMuscleParts.map({ $0.name }).joined(separator: " & ").uppercased()).font(.system(size: 32, weight: .black, design: .rounded)).foregroundColor(.white).fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer()
-                            Image(systemName: isExerciseListVisible ? "chevron.up.circle.fill" : "chevron.down.circle.fill").font(.system(size: 32)).foregroundColor(dataManager.primaryColor)
-                        }
-                        HStack(spacing: 8) {
-                            Label("\(dailyWorkouts.count) EXERCISES", systemImage: "dumbbell.fill")
-                            Text("•")
-                            Label("45 MINS", systemImage: "clock.fill")
-                        }.font(Typography.labelSmall).foregroundColor(Theme.Colors.onSurfaceVariant)
-                    }
-                    .padding(32).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(ZStack { Theme.Colors.surfaceContainerHigh; LinearGradient(colors: [dataManager.primaryColor.opacity(0.05), .clear], startPoint: .topLeading, endPoint: .bottomTrailing) })
-                    .clipShape(RoundedRectangle(cornerRadius: 32)).ghostBorder(radius: 32).shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-                }
-                .buttonStyle(ScaleButtonStyle()).padding(.horizontal, 24).padding(.top, 8)
-                
-                if isExerciseListVisible {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 16) {
+                if dailyMuscleParts.isEmpty {
                     VStack(spacing: 12) {
-                        ForEach(displayWorkouts, id: \.name) { workout in
-                            WorkoutLogCard(exerciseName: workout.name, sets: workout.sets)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    let fallback = Exercise(name: workout.name, musclePartName: "CUSTOM")
-                                    var resolvedEx = dataManager.exerciseLibrary.first(where: { $0.name == workout.name }) ?? fallback
-                                    
-                                    // Inject dummy/routine sets so the Logger "oddler" and autobox prefill them
-                                    if !workout.sets.isEmpty {
-                                        resolvedEx.previousSets = workout.sets
-                                        // For the PR module to show the max weight of the routine
-                                        if let maxW = workout.sets.map({ $0.weight }).max(), resolvedEx.maxWeight == 0 {
-                                            resolvedEx.maxWeight = maxW
-                                        }
-                                    }
-                                    onQuickLog?(resolvedEx)
+                        Image(systemName: "cup.and.saucer.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(dataManager.primaryColor)
+                        Text("REST DAY").font(.system(size: 24, weight: .black, design: .rounded)).foregroundColor(.white)
+                        Text("Recovery is where the growth happens.").font(Typography.bodySmall).foregroundColor(Theme.Colors.onSurfaceVariant).multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity).frame(height: 300)
+                    .background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 32)).padding(.horizontal, 24).padding(.top, 8)
+                } else {
+                    Button(action: {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { isExerciseListVisible.toggle() }
+                    }) {
+                        VStack(alignment: .leading, spacing: 20) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(isCompleted ? "LOGGED" : "TODAY'S FOCUS")
+                                        .technicalMicroCopy()
+                                        .foregroundColor(cardAccentColor.opacity(0.8))
+                                    Text(dailyMuscleParts.map({ $0.name }).joined(separator: " & ").uppercased())
+                                        .font(.system(size: 32, weight: .black, design: .rounded))
+                                        .foregroundColor(.white)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .multilineTextAlignment(.leading)
                                 }
+                                Spacer()
+                                Image(systemName: isExerciseListVisible ? "chevron.up.circle.fill" : (isCompleted ? "checkmark.circle.fill" : "chevron.down.circle.fill"))
+                                    .font(.system(size: 32))
+                                    .foregroundColor(cardAccentColor)
+                            }
+                            HStack(spacing: 8) {
+                                Label("\(displayWorkouts.count) EXERCISES", systemImage: "dumbbell.fill")
+                                Text("•")
+                                Label(isCompleted ? "COMPLETED" : "45 MINS", systemImage: isCompleted ? "flag.checkered" : "clock.fill")
+                            }
+                            .font(Typography.labelSmall)
+                            .foregroundColor(Theme.Colors.onSurfaceVariant)
                         }
-                    }.padding(.top, 8)
+                        .padding(32).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(ZStack { 
+                            Theme.Colors.surfaceContainerHigh
+                            LinearGradient(colors: [cardAccentColor.opacity(0.05), .clear], startPoint: .topLeading, endPoint: .bottomTrailing) 
+                        })
+                        .clipShape(RoundedRectangle(cornerRadius: 32))
+                        .ghostBorder(radius: 32)
+                        .shadow(color: isCompleted ? cardAccentColor.opacity(0.15) : .black.opacity(0.3), radius: 20, x: 0, y: 10)
+                    }
+                    .buttonStyle(ScaleButtonStyle()).padding(.horizontal, 24).padding(.top, 8)
+                    
+                    if isExerciseListVisible {
+                        VStack(spacing: 12) {
+                            ForEach(displayWorkouts, id: \.name) { workout in
+                                WorkoutLogCard(exerciseName: workout.name, sets: workout.sets)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        let fallback = Exercise(name: workout.name, musclePartName: "CUSTOM")
+                                        var resolvedEx = dataManager.exerciseLibrary.first(where: { $0.name == workout.name }) ?? fallback
+                                        if !workout.sets.isEmpty {
+                                            resolvedEx.previousSets = workout.sets
+                                            if let maxW = workout.sets.map({ $0.weight }).max(), resolvedEx.maxWeight == 0 {
+                                                resolvedEx.maxWeight = maxW
+                                            }
+                                        }
+                                        onQuickLog?(resolvedEx)
+                                    }
+                            }
+                            
+                            // Thumb-friendly close button at the bottom of the long list
+                            Button(action: {
+                                let generator = UIImpactFeedbackGenerator(style: .medium)
+                                generator.impactOccurred()
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                    isExerciseListVisible = false
+                                }
+                            }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "chevron.up")
+                                        .font(.system(size: 14, weight: .bold))
+                                    Text("CLOSE LIST")
+                                        .font(.system(size: 14, weight: .black, design: .rounded))
+                                }
+                                .foregroundColor(cardAccentColor)
+                                .padding(.vertical, 16)
+                                .padding(.horizontal, 32)
+                                .background(Theme.Colors.surfaceContainerHigh)
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule().stroke(cardAccentColor.opacity(0.3), lineWidth: 1)
+                                )
+                            }
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+                        }
+                        .padding(.top, 8)
+                    }
                 }
+                Spacer(minLength: 160)
             }
-            Spacer(minLength: 140)
         }
     }
 }

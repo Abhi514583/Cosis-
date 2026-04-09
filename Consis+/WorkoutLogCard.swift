@@ -12,7 +12,7 @@ public struct WorkoutLogCard: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(exerciseName)
-                .font(Typography.headlineLarge)
+                .font(.system(size: 20, weight: .black, design: .rounded))
                 .foregroundColor(Theme.Colors.onSurface)
                 .padding(.horizontal, 24)
             
@@ -25,7 +25,7 @@ public struct WorkoutLogCard: View {
                             .frame(width: 24, alignment: .leading)
                         
                         Text("\(workoutSet.weight, specifier: "%.1f") kg")
-                            .font(Typography.titleLarge)
+                            .font(.system(size: 20, weight: .bold, design: .monospaced))
                             .foregroundColor(Theme.Colors.onSurface)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         
@@ -40,14 +40,14 @@ public struct WorkoutLogCard: View {
                         }
                         
                         Text("\(workoutSet.reps) reps")
-                            .font(Typography.titleMedium)
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
                             .foregroundColor(Theme.Colors.primary) // Red focus
                     }
                     .padding(.horizontal, 24)
-                    .padding(.vertical, 16)
-                    // Zebra striping - No lines allowed!
+                    .padding(.vertical, 10) // Reduced from 16
+                    // Zebra striping
                     .background(index % 2 == 0 ? Theme.Colors.surfaceContainerLow : Color.clear)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
             }
             .padding(.horizontal, 8)

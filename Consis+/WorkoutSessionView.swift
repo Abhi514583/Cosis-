@@ -13,7 +13,6 @@ public struct WorkoutSessionView: View {
     @State private var phase: SessionPhase = .overview
     @State private var selectedMuscle: MusclePart?
     let sessionDate: Date
-    @FocusState private var focusedField: TableLoggerView.Field?
     
     public init(sessionDate: Date = Date(), initialExercise: Exercise? = nil) {
         self.sessionDate = sessionDate
@@ -42,9 +41,7 @@ public struct WorkoutSessionView: View {
                 ExerciseSelectionFeedView(
                     selectedMuscle: $selectedMuscle,
                     onSelect: { ex in 
-                        focusedField = nil
                         var resolvedEx = ex
-                        // Check if this exercise is in today's routine to inject template data
                         let routine = dataManager.routineExercises(for: sessionDate)
                         if let plan = routine.first(where: { $0.name == ex.name }) {
                             resolvedEx.previousSets = plan.sets
@@ -53,7 +50,6 @@ public struct WorkoutSessionView: View {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .logging(resolvedEx) } 
                     },
                     onClose: { 
-                        focusedField = nil
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .overview } 
                     }
                 )
@@ -61,64 +57,10 @@ public struct WorkoutSessionView: View {
                 TableLoggerView(
                     exercise: ex,
                     sessionDate: sessionDate,
-                    focusedField: $focusedField,
                     onBack: { 
-                        focusedField = nil
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .overview } 
                     }
                 )
-            }
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                if focusedField == .weight {
-                    HStack(spacing: 6) {
-                        Text("2x").font(.system(size: 12, weight: .black)).foregroundColor(.gray)
-                        ForEach([25, 35, 45], id: \.self) { p in
-                            Button("+\(p)") {
-                                NotificationCenter.default.post(name: Notification.Name("AddWeight"), object: nil, userInfo: ["amount": p])
-                            }
-                            .font(.system(size: 14, weight: .black)).foregroundColor(.white)
-                            .padding(.horizontal, 8).padding(.vertical, 6)
-                            .background(Theme.Colors.surfaceContainerHighest).clipShape(Capsule())
-                        }
-                    }
-                    Spacer()
-                    Button(action: { focusedField = .reps }) {
-                        HStack(spacing: 4) {
-                            Text("Next: Reps").font(.system(size: 14, weight: .black))
-                            Image(systemName: "arrow.right.circle.fill")
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Theme.Colors.primary)
-                        .clipShape(Capsule())
-                    }
-                } else if focusedField == .reps {
-                    Button(action: { focusedField = .weight }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.left.circle.fill")
-                            Text("Weight").font(.system(size: 14, weight: .bold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Theme.Colors.surfaceContainerHigh)
-                        .clipShape(Capsule())
-                    }
-                    Spacer()
-                    Button(action: {
-                        NotificationCenter.default.post(name: Notification.Name("LogSet"), object: nil)
-                    }) {
-                        HStack(spacing: 4) {
-                            Text("LOG SET").font(.system(size: 14, weight: .black))
-                            Image(systemName: "checkmark.circle.fill")
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Color(hex: "#30D158"))
-                        .clipShape(Capsule())
-                    }
-                }
             }
         }
         .onAppear {
@@ -404,12 +346,12 @@ struct CreateCustomExerciseSheet: View {
 struct TableLoggerView: View {
     let exercise: Exercise
     let sessionDate: Date
-    @FocusState.Binding var focusedField: Field?
     let onBack: () -> Void
     @EnvironmentObject var dataManager: WorkoutDataManager
     
     @State private var weightInput: String = ""
     @State private var repsInput: String = ""
+    @FocusState private var focusedField: Field?
     
     enum Field { case weight, reps }
     
@@ -554,29 +496,68 @@ struct TableLoggerView: View {
             .ignoresSafeArea(.keyboard, edges: .bottom)
         }
         .background(Theme.Colors.surface.ignoresSafeArea())
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                if focusedField == .weight {
+                    HStack(spacing: 6) {
+                        Text("2x").font(.system(size: 12, weight: .black)).foregroundColor(.gray)
+                        ForEach([25, 35, 45], id: \.self) { p in
+                            Button("+\(p)") {
+                                let cur = Double(weightInput) ?? 0.0
+                                weightInput = String(format: "%.1f", cur + Double(p * 2)).replacingOccurrences(of: ".0", with: "")
+                            }
+                            .font(.system(size: 14, weight: .black)).foregroundColor(.white)
+                            .padding(.horizontal, 8).padding(.vertical, 6)
+                            .background(Theme.Colors.surfaceContainerHighest).clipShape(Capsule())
+                        }
+                    }
+                    Spacer()
+                    Button(action: { focusedField = .reps }) {
+                        HStack(spacing: 4) {
+                            Text("Next: Reps").font(.system(size: 14, weight: .black))
+                            Image(systemName: "arrow.right.circle.fill")
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Theme.Colors.primary)
+                        .clipShape(Capsule())
+                    }
+                } else if focusedField == .reps {
+                    Button(action: { focusedField = .weight }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.left.circle.fill")
+                            Text("Weight").font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Theme.Colors.surfaceContainerHigh)
+                        .clipShape(Capsule())
+                    }
+                    Spacer()
+                    Button(action: { logSet() }) {
+                        HStack(spacing: 4) {
+                            Text("LOG SET").font(.system(size: 14, weight: .black))
+                            Image(systemName: "checkmark.circle.fill")
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Color(hex: "#30D158"))
+                        .clipShape(Capsule())
+                    }
+                }
+            }
+        }
         .onAppear {
             populatePrevious()
-            // Reset focus first to ensure the transition doesn't confuse the keyboard manager
-            focusedField = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                if weightInput.isEmpty {
-                    focusedField = .weight
-                } else {
-                    focusedField = .reps
-                }
+            // Make focus immediate to prevent transition lag feeling!
+            if weightInput.isEmpty {
+                focusedField = .weight
+            } else {
+                focusedField = .reps
             }
         }
         .onDisappear {
             focusedField = nil
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("AddWeight"))) { note in
-            if let amount = note.userInfo?["amount"] as? Int {
-                let cur = Double(weightInput) ?? 0.0
-                weightInput = String(format: "%.1f", cur + Double(amount * 2)).replacingOccurrences(of: ".0", with: "")
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LogSet"))) { _ in
-            logSet()
         }
     }
     

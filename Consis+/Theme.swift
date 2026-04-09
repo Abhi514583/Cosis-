@@ -22,6 +22,7 @@ public enum Theme {
         public static let onSurface = Color(hex: "#e2e2e2")
         public static let onSurfaceVariant = Color(hex: "#DDA09E")
         public static let error = Color(hex: "#FF453A")
+        public static let success = Color(hex: "#22C55E")
     }
 }
 
