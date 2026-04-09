@@ -70,6 +70,7 @@ public struct ActiveWorkoutSession: Identifiable {
     public let id = UUID()
     public var date: Date
     public var exerciseLogs: [ExerciseLog] = []
+    public var removedPlannedExercises: Set<String> = []
 }
 
 public class WorkoutDataManager: ObservableObject {
@@ -89,6 +90,28 @@ public class WorkoutDataManager: ObservableObject {
     
     public func saveSession(_ session: ActiveWorkoutSession, for date: Date) {
         sessions[dateKey(date)] = session
+    }
+    
+    public func deleteExerciseLog(name: String, for date: Date) {
+        if var current = session(for: date) {
+            // Remove from logs if it exists
+            current.exerciseLogs.removeAll(where: { $0.exercise.name == name })
+            // Also mark as removed from planned routine for this session
+            current.removedPlannedExercises.insert(name)
+            saveSession(current, for: date)
+        }
+    }
+    
+    public func deleteWorkoutSet(exerciseId: UUID, setId: UUID, for date: Date) {
+        if var current = session(for: date),
+           let idx = current.exerciseLogs.firstIndex(where: { $0.exercise.id == exerciseId }) {
+            current.exerciseLogs[idx].sets.removeAll(where: { $0.id == setId })
+            // Re-order set numbers
+            for i in 0..<current.exerciseLogs[idx].sets.count {
+                current.exerciseLogs[idx].sets[i].setNumber = i + 1
+            }
+            saveSession(current, for: date)
+        }
     }
     
     public func dateKey(_ date: Date) -> String {

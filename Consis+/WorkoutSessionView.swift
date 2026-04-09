@@ -4,10 +4,19 @@ public struct WorkoutSessionView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var dataManager: WorkoutDataManager
     
-    enum SessionPhase {
+    enum SessionPhase: Equatable {
         case overview
         case selection
         case logging(Exercise)
+        
+        static func == (lhs: SessionPhase, rhs: SessionPhase) -> Bool {
+            switch (lhs, rhs) {
+            case (.overview, .overview): return true
+            case (.selection, .selection): return true
+            case (.logging(let l), .logging(let r)): return l.id == r.id
+            default: return false
+            }
+        }
     }
     
     @State private var phase: SessionPhase = .overview
@@ -68,6 +77,15 @@ public struct WorkoutSessionView: View {
                 let initialSession = ActiveWorkoutSession(date: sessionDate, exerciseLogs: [])
                 dataManager.saveSession(initialSession, for: sessionDate)
             }
+            
+            // Auto-skip to selection if the session and routine are entirely empty
+            if phase == .overview {
+                let routine = dataManager.routineExercises(for: sessionDate)
+                let session = dataManager.session(for: sessionDate)
+                if routine.isEmpty && (session?.exerciseLogs.isEmpty ?? true) {
+                    phase = .selection
+                }
+            }
         }
     }
 }
@@ -94,60 +112,80 @@ struct ActiveWorkoutOverviewView: View {
             }
             .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 16)
             
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 16) {
-                    let routine = dataManager.routineExercises(for: sessionDate)
-                    let session = dataManager.session(for: sessionDate) ?? ActiveWorkoutSession(date: sessionDate, exerciseLogs: [])
+            List {
+                let routine = dataManager.routineExercises(for: sessionDate)
+                let session = dataManager.session(for: sessionDate) ?? ActiveWorkoutSession(date: sessionDate, exerciseLogs: [])
+                
+                // Merge routine with actual logs
+                let displayItems: [(name: String, sets: [WorkoutSet], isLogged: Bool, unit: WeightUnit)] = {
+                    var items: [(name: String, sets: [WorkoutSet], isLogged: Bool, unit: WeightUnit)] = []
+                    var loggedNames = Set<String>()
                     
-                    // Merge routine with actual logs
-                    let displayItems: [(name: String, sets: [WorkoutSet], isLogged: Bool, unit: WeightUnit)] = {
-                        var items: [(name: String, sets: [WorkoutSet], isLogged: Bool, unit: WeightUnit)] = []
-                        var loggedNames = Set<String>()
-                        
-                        // First, add all logged exercises
-                        for log in session.exerciseLogs {
-                            items.append((name: log.exercise.name, sets: log.sets, isLogged: true, unit: log.unit))
-                            loggedNames.insert(log.exercise.name)
-                        }
-                        
-                        // Then add planned exercises from routine (Assume library/routine defaults to KG)
-                        for plan in routine {
-                            if !loggedNames.contains(plan.name) {
-                                items.append((name: plan.name, sets: plan.sets, isLogged: false, unit: .kg))
-                            }
-                        }
-                        return items
-                    }()
-                    
-                    if !displayItems.isEmpty {
-                        ForEach(displayItems, id: \.name) { item in
-                            PaintedLogCard(name: item.name, sets: item.sets, isLogged: item.isLogged, originalUnit: item.unit)
-                                .onTapGesture {
-                                    // Resolve exercise from library or create fallback
-                                    let fallback = Exercise(name: item.name, musclePartName: "CUSTOM")
-                                    var resolvedEx = dataManager.exerciseLibrary.first(where: { $0.name == item.name }) ?? fallback
-                                    
-                                    if !item.isLogged {
-                                        // Inject template sets into previousSets so logger pre-fills
-                                        resolvedEx.previousSets = item.sets
-                                    }
-                                    
-                                    onResumeExercise(resolvedEx)
-                                }
-                        }
-                    } else {
-                        VStack(spacing: 12) {
-                            Spacer().frame(height: 60)
-                            Image(systemName: "dumbbell.fill").font(.system(size: 48)).foregroundColor(.white.opacity(0.1))
-                            Text("Workout Empty").font(.system(size: 18, weight: .bold)).foregroundColor(.gray)
-                            Text("Add an exercise to start painting your canvas.").font(.system(size: 14)).foregroundColor(.white.opacity(0.4))
-                        }
+                    // First, add all logged exercises
+                    for log in session.exerciseLogs {
+                        items.append((name: log.exercise.name, sets: log.sets, isLogged: true, unit: log.unit))
+                        loggedNames.insert(log.exercise.name)
                     }
                     
-                    Spacer().frame(height: 100)
+                    // Then add planned exercises from routine (ignoring removed ones)
+                    for plan in routine {
+                        if !loggedNames.contains(plan.name) && !session.removedPlannedExercises.contains(plan.name) {
+                            items.append((name: plan.name, sets: plan.sets, isLogged: false, unit: .kg))
+                        }
+                    }
+                    return items
+                }()
+                
+                if !displayItems.isEmpty {
+                    ForEach(displayItems, id: \.name) { item in
+                        PaintedLogCard(name: item.name, sets: item.sets, isLogged: item.isLogged, originalUnit: item.unit)
+                            .contentShape(Rectangle()) // Make the whole area tappable
+                            .onTapGesture {
+                                // Resolve exercise from library or create fallback
+                                let fallback = Exercise(name: item.name, musclePartName: "CUSTOM")
+                                var resolvedEx = dataManager.exerciseLibrary.first(where: { $0.name == item.name }) ?? fallback
+                                
+                                if !item.isLogged {
+                                    // Inject template sets into previousSets so logger pre-fills
+                                    resolvedEx.previousSets = item.sets
+                                }
+                                
+                                onResumeExercise(resolvedEx)
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                                    generator.impactOccurred()
+                                    withAnimation {
+                                        dataManager.deleteExerciseLog(name: item.name, for: sessionDate)
+                                    }
+                                } label: {
+                                    Label("Delete", systemImage: "trash.fill")
+                                }
+                            }
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 24, bottom: 8, trailing: 24))
+                } else {
+                    VStack(spacing: 12) {
+                        Spacer().frame(height: 60)
+                        Image(systemName: "dumbbell.fill").font(.system(size: 48)).foregroundColor(.white.opacity(0.1))
+                        Text("Workout Empty").font(.system(size: 18, weight: .bold)).foregroundColor(.gray)
+                        Text("Add an exercise to start painting your canvas.").font(.system(size: 14)).foregroundColor(.white.opacity(0.4))
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
-                .padding(.horizontal, 24).padding(.top, 16)
+                
+                // Bottom padding row to ensure content clears footer
+                Color.clear.frame(height: 100)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .padding(.top, 8)
             
             // Footer Actions
             VStack(spacing: 16) {
@@ -243,52 +281,72 @@ struct ExerciseSelectionFeedView: View {
             .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 16)
             
             // Segments
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(dataManager.availableParts) { part in
-                        Text(part.name.capitalized).font(.system(size: 16, weight: selectedMuscle == part ? .bold : .medium))
-                            .foregroundColor(selectedMuscle == part ? .white : .gray).padding(.vertical, 8).padding(.horizontal, 16)
-                            .background(selectedMuscle == part ? Theme.Colors.surfaceContainerHigh : Color.clear).clipShape(Capsule())
-                            .onTapGesture { withAnimation { selectedMuscle = part } }
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(dataManager.availableParts) { part in
+                            Text(part.name.capitalized).font(.system(size: 16, weight: selectedMuscle == part ? .bold : .medium))
+                                .foregroundColor(selectedMuscle == part ? .white : .gray).padding(.vertical, 8).padding(.horizontal, 16)
+                                .background(selectedMuscle == part ? Theme.Colors.surfaceContainerHigh : Color.clear).clipShape(Capsule())
+                                .id(part)
+                                .onTapGesture { 
+                                    let gen = UISelectionFeedbackGenerator()
+                                    gen.selectionChanged()
+                                    withAnimation { selectedMuscle = part } 
+                                }
+                        }
+                    }.padding(.horizontal, 24)
+                }.padding(.bottom, 12)
+                .onChange(of: selectedMuscle) { newVal in
+                    if let val = newVal {
+                        withAnimation { proxy.scrollTo(val, anchor: .center) }
                     }
-                }.padding(.horizontal, 24)
-            }.padding(.bottom, 12)
+                }
+            }
             
             Divider().background(Color.white.opacity(0.1))
             
-            // Vertical Feed
-            ScrollView {
-                if let muscle = selectedMuscle {
-                    LazyVStack(spacing: 12) {
-                        ForEach(dataManager.exerciseLibrary.filter { $0.musclePartName == muscle.name }) { ex in
-                            Button(action: { onSelect(ex) }) {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(ex.name).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundColor(.white)
-                                        Text(ex.musclePartName).font(.system(size: 10, weight: .bold)).foregroundColor(muscle.color).padding(.horizontal, 8).padding(.vertical, 4).background(muscle.color.opacity(0.15)).clipShape(Capsule())
-                                    }
-                                    Spacer()
-                                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundColor(.white.opacity(0.3))
-                                }.padding(20).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 24))
-                            }.buttonStyle(PlainButtonStyle())
-                        }
-                        
-                        Button(action: { showCreateCustom = true }) {
-                            HStack {
-                                Image(systemName: "plus.circle.fill")
-                                Text("Create Custom Exercise")
+            // Swipable Vertical Feed
+            TabView(selection: $selectedMuscle) {
+                ForEach(dataManager.availableParts) { muscle in
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(dataManager.exerciseLibrary.filter { $0.musclePartName == muscle.name }) { ex in
+                                Button(action: { onSelect(ex) }) {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text(ex.name).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundColor(.white)
+                                            Text(ex.musclePartName).font(.system(size: 10, weight: .bold)).foregroundColor(muscle.color).padding(.horizontal, 8).padding(.vertical, 4).background(muscle.color.opacity(0.15)).clipShape(Capsule())
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundColor(.white.opacity(0.3))
+                                    }.padding(20).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 24))
+                                }.buttonStyle(PlainButtonStyle())
                             }
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                            .foregroundColor(Theme.Colors.primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 20)
-                            .background(Theme.Colors.surfaceContainerLow)
-                            .clipShape(RoundedRectangle(cornerRadius: 24))
-                            .overlay(RoundedRectangle(cornerRadius: 24).stroke(Theme.Colors.primary.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [6, 6])))
-                        }
-                        .padding(.top, 12)
-                    }.padding(24)
+                            
+                            Button(action: { showCreateCustom = true }) {
+                                HStack {
+                                    Image(systemName: "plus.circle.fill")
+                                    Text("Create Custom Exercise")
+                                }
+                                .font(.system(size: 16, weight: .bold, design: .rounded))
+                                .foregroundColor(Theme.Colors.primary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 20)
+                                .background(Theme.Colors.surfaceContainerLow)
+                                .clipShape(RoundedRectangle(cornerRadius: 24))
+                                .overlay(RoundedRectangle(cornerRadius: 24).stroke(Theme.Colors.primary.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [6, 6])))
+                            }
+                            .padding(.top, 12)
+                        }.padding(24)
+                    }
+                    .tag(Optional(muscle))
                 }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .onChange(of: selectedMuscle) { _ in
+                let gen = UISelectionFeedbackGenerator()
+                gen.selectionChanged()
             }
         }
         .onAppear { if selectedMuscle == nil { selectedMuscle = dataManager.availableParts.first } }
@@ -351,6 +409,7 @@ struct TableLoggerView: View {
     
     @State private var weightInput: String = ""
     @State private var repsInput: String = ""
+    @State private var editingSetId: UUID? = nil
     @FocusState private var focusedField: Field?
     
     enum Field { case weight, reps }
@@ -442,32 +501,57 @@ struct TableLoggerView: View {
                                         .frame(width: 80, height: 36, alignment: .center).font(.system(size: 16, weight: .bold)).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 10)).foregroundColor(.white)
                                     Text("\(s.reps)")
                                         .frame(width: 70, height: 36, alignment: .center).font(.system(size: 16, weight: .bold)).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 10)).foregroundColor(.white)
-                                    Image(systemName: "checkmark").frame(width: 40, alignment: .trailing).font(.system(size: 16, weight: .heavy)).foregroundColor(Color(hex: "#30D158"))
-                                }.padding(.horizontal, 24).padding(.vertical, 10)
+                                    Image(systemName: editingSetId == s.id ? "pencil" : "checkmark").frame(width: 40, alignment: .trailing).font(.system(size: 16, weight: .heavy)).foregroundColor(editingSetId == s.id ? .orange : Color(hex: "#30D158"))
+                                }
+                                .padding(.horizontal, 24).padding(.vertical, 10)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    let generator = UIImpactFeedbackGenerator(style: .light)
+                                    generator.impactOccurred()
+                                    withAnimation {
+                                        editingSetId = s.id
+                                        weightInput = String(format: "%.1f", dataManager.weightUnit.convert(s.weight, from: log.unit)).replacingOccurrences(of: ".0", with: "")
+                                        repsInput = "\(s.reps)"
+                                        focusedField = .weight
+                                    }
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                                        generator.impactOccurred()
+                                        withAnimation {
+                                            if editingSetId == s.id { editingSetId = nil; weightInput = ""; repsInput = "" }
+                                            dataManager.deleteWorkoutSet(exerciseId: exercise.id, setId: s.id, for: sessionDate)
+                                        }
+                                    } label: {
+                                        Label("Delete", systemImage: "trash.fill")
+                                    }
+                                }
                             }
                         }
                         
-                        // Active Input Row
-                        let nextSetNum = (dataManager.session(for: sessionDate)?.exerciseLogs.first(where: { $0.exercise.id == exercise.id })?.sets.last?.setNumber ?? 0) + 1
+                        // Active Input Row / Editor Placeholder
+                        let loggedSets = (dataManager.session(for: sessionDate)?.exerciseLogs.first(where: { $0.exercise.id == exercise.id })?.sets ?? [])
+                        let nextSetNum = editingSetId != nil ? (loggedSets.first(where: { $0.id == editingSetId })?.setNumber ?? 1) : (loggedSets.last?.setNumber ?? 0) + 1
                         
                         HStack {
-                            Text("\(nextSetNum)").frame(width: 40, alignment: .center).font(.system(size: 14, weight: .black)).foregroundColor(.white)
+                            Text("\(nextSetNum)").frame(width: 40, alignment: .center).font(.system(size: 14, weight: .black)).foregroundColor(editingSetId != nil ? .orange : .white)
                             Text(previousDataString(for: nextSetNum)).frame(maxWidth: .infinity, alignment: .center).font(.system(size: 12, weight: .bold)).foregroundColor(.gray.opacity(0.5)).lineLimit(1)
                             
                             TextField("-", text: $weightInput)
                                 .keyboardType(.decimalPad).focused($focusedField, equals: .weight).multilineTextAlignment(.center)
                                 .frame(width: 80, height: 42).font(.system(size: 18, weight: .black)).foregroundColor(.white).tint(Theme.Colors.primary).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 10))
-                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(focusedField == .weight ? Theme.Colors.primary : Color.clear, lineWidth: 2))
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(focusedField == .weight ? (editingSetId != nil ? Color.orange : Theme.Colors.primary) : Color.clear, lineWidth: 2))
                             
                             TextField("-", text: $repsInput)
                                 .keyboardType(.numberPad).focused($focusedField, equals: .reps).multilineTextAlignment(.center)
                                 .frame(width: 70, height: 42).font(.system(size: 18, weight: .black)).foregroundColor(.white).tint(Theme.Colors.primary).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 10))
-                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(focusedField == .reps ? Theme.Colors.primary : Color.clear, lineWidth: 2))
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(focusedField == .reps ? (editingSetId != nil ? Color.orange : Theme.Colors.primary) : Color.clear, lineWidth: 2))
                             
                             Button(action: logSet) {
-                                Image(systemName: "checkmark").frame(width: 32, height: 32).background(Color(hex: "#30D158")).clipShape(Circle()).foregroundColor(Theme.Colors.surface).font(.system(size: 14, weight: .black))
-                            }.frame(width: 40, alignment: .trailing).disabled(weightInput.isEmpty || repsInput.isEmpty).opacity(weightInput.isEmpty || repsInput.isEmpty ? 0.3 : 1.0)
-                        }.padding(.horizontal, 24).padding(.vertical, 16).background(Theme.Colors.surfaceContainerLowest.opacity(0.5))
+                                Image(systemName: editingSetId != nil ? "arrow.up.circle.fill" : "checkmark").frame(width: 32, height: 32).background(editingSetId != nil ? Color.orange : Color(hex: "#30D158")).clipShape(Circle()).foregroundColor(Theme.Colors.surface).font(.system(size: 14, weight: .black))
+                            }.frame(width: 40, alignment: .trailing)
+                        }.padding(.horizontal, 24).padding(.vertical, 16).background((editingSetId != nil ? Color.orange.opacity(0.1) : Theme.Colors.surfaceContainerLowest.opacity(0.5)))
                     }.padding(.top, 8)
                     
                     Spacer().frame(height: 100)
@@ -597,13 +681,29 @@ struct TableLoggerView: View {
     }
     
     private func logSet() {
-        guard let w = Double(weightInput), let r = Int(repsInput) else { return }
+        let w = Double(weightInput) ?? 0.0
+        let r = Int(repsInput) ?? 0
+        
+        // Reps can't be zero, weight can be
+        guard r > 0 else {
+            let gen = UINotificationFeedbackGenerator()
+            gen.notificationOccurred(.error)
+            return
+        }
         
         var currentSession = dataManager.session(for: sessionDate) ?? ActiveWorkoutSession(date: sessionDate, exerciseLogs: [])
         
         if let idx = currentSession.exerciseLogs.firstIndex(where: { $0.exercise.id == exercise.id }) {
-            let n = (currentSession.exerciseLogs[idx].sets.last?.setNumber ?? 0) + 1
-            currentSession.exerciseLogs[idx].sets.append(WorkoutSet(setNumber: n, reps: r, weight: w))
+            if let editId = editingSetId, let sIdx = currentSession.exerciseLogs[idx].sets.firstIndex(where: { $0.id == editId }) {
+                // Update existing set
+                currentSession.exerciseLogs[idx].sets[sIdx].weight = w
+                currentSession.exerciseLogs[idx].sets[sIdx].reps = r
+                editingSetId = nil
+            } else {
+                // Add new set
+                let n = (currentSession.exerciseLogs[idx].sets.last?.setNumber ?? 0) + 1
+                currentSession.exerciseLogs[idx].sets.append(WorkoutSet(setNumber: n, reps: r, weight: w))
+            }
         } else {
             currentSession.exerciseLogs.append(ExerciseLog(exercise: exercise, sets: [WorkoutSet(setNumber: 1, reps: r, weight: w)], unit: dataManager.weightUnit))
         }
