@@ -1,111 +1,76 @@
 import SwiftUI
 
 struct WorkoutHeatmapView: View {
+    let year: Int
     @EnvironmentObject var dataManager: WorkoutDataManager
     
-    // Calculate the last 52 weeks of dates
-    private var weeks: [[Date?]] {
-        let calendar = Calendar.current
-        var allDates: [Date?] = []
-        
-        // Find the most recent Sunday to start the grid
-        let today = Date()
-        let weekday = calendar.component(.weekday, from: today)
-        let daysToSubtract = (weekday - 1)
-        guard let endDate = calendar.date(byAdding: .day, value: -daysToSubtract, to: today) else { return [] }
-        
-        // Go back 364 days (52 weeks)
-        for i in (0..<371).reversed() {
-            if let date = calendar.date(byAdding: .day, value: -i, to: endDate) {
-                allDates.append(date)
-            }
-        }
-        
-        // Group into weeks of 7
-        var result: [[Date?]] = []
-        for i in stride(from: 0, to: allDates.count, by: 7) {
-            let week = Array(allDates[i..<min(i + 7, allDates.count)])
-            result.append(week)
-        }
-        return result
-    }
+    private let months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ]
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("CONSISTENCY")
-                .technicalMicroCopy()
-                .foregroundColor(dataManager.primaryColor)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    // Weekday Labels
-                    VStack(alignment: .leading, spacing: 4) {
-                        Spacer().frame(height: 20) // For month labels alignment
-                        Text("Mon").font(.system(size: 8)).foregroundColor(.gray)
-                        Spacer()
-                        Text("Wed").font(.system(size: 8)).foregroundColor(.gray)
-                        Spacer()
-                        Text("Fri").font(.system(size: 8)).foregroundColor(.gray)
-                    }
-                    .frame(width: 24)
-                    
-                    // The Grid
-                    ForEach(0..<weeks.count, id: \.self) { weekIndex in
-                        VStack(spacing: 4) {
-                            // Month Label (Only show if it's the start of a month)
-                            if let firstDate = weeks[weekIndex].first(where: { $0 != nil })!,
-                               Calendar.current.component(.day, from: firstDate) <= 7 {
-                                Text(firstDate.monthAbbreviation())
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.gray)
-                                    .frame(height: 12)
-                            } else {
-                                Spacer().frame(height: 12)
-                            }
-                            
-                            ForEach(0..<7) { dayIndex in
-                                if dayIndex < weeks[weekIndex].count, let date = weeks[weekIndex][dayIndex] {
-                                    HeatmapCell(date: date)
-                                } else {
-                                    Rectangle()
-                                        .fill(Color.clear)
-                                        .frame(width: 12, height: 12)
-                                }
-                            }
-                        }
-                    }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 16) {
+                ForEach(0..<12, id: \.self) { monthIndex in
+                    MonthBlockView(year: year, month: monthIndex + 1, monthName: months[monthIndex])
                 }
-                .padding(.bottom, 8)
             }
-            .ghostBorder(radius: 20)
-            .padding(.horizontal, -4)
+            .padding(16)
+            .background(Theme.Colors.surfaceContainerLow.opacity(0.5))
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .ghostBorder(radius: 24)
         }
     }
 }
 
-struct HeatmapCell: View {
-    let date: Date
+struct MonthBlockView: View {
+    let year: Int
+    let month: Int
+    let monthName: String
     @EnvironmentObject var dataManager: WorkoutDataManager
     
-    var body: some View {
-        let dateKey = dataManager.dateKey(date)
-        let heatmapColor = dataManager.heatmapData()[dateKey]
+    private var daysInMonth: [Date?] {
+        let calendar = Calendar.current
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = 1
         
-        RoundedRectangle(cornerRadius: 3)
-            .fill(heatmapColor ?? Theme.Colors.surfaceContainerLow)
-            .frame(width: 12, height: 12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 3)
-                    .stroke(Color.white.opacity(heatmapColor != nil ? 0.2 : 0.05), lineWidth: 0.5)
-            )
-            .shadow(color: (heatmapColor ?? Color.clear).opacity(0.3), radius: 2)
+        guard let startOfMonth = calendar.date(from: components),
+              let range = calendar.range(of: .day, in: .month, for: startOfMonth) else { return [] }
+        
+        let firstWeekday = calendar.component(.weekday, from: startOfMonth)
+        var days: [Date?] = Array(repeating: nil, count: firstWeekday - 1)
+        
+        for day in 1...range.count {
+            components.day = day
+            days.append(calendar.date(from: components))
+        }
+        return days
     }
-}
-
-extension Date {
-    func monthAbbreviation() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM"
-        return formatter.string(from: self)
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(monthName)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundColor(.gray)
+            
+            let columns = Array(repeating: GridItem(.fixed(6), spacing: 2), count: 7)
+            LazyVGrid(columns: columns, spacing: 2) {
+                ForEach(0..<daysInMonth.count, id: \.self) { index in
+                    if let date = daysInMonth[index] {
+                        let dateKey = dataManager.dateKey(date)
+                        let heatmapColor = dataManager.heatmapData(year: year)[dateKey]
+                        
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(heatmapColor ?? Color.white.opacity(0.05))
+                            .frame(width: 6, height: 6)
+                    } else {
+                        Spacer().frame(width: 6, height: 6)
+                    }
+                }
+            }
+        }
     }
 }

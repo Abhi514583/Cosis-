@@ -243,11 +243,15 @@ public class WorkoutDataManager: ObservableObject {
         return results
     }
     
-    public func heatmapData() -> [String: Color] {
+    public func heatmapData(year: Int) -> [String: Color] {
         var results: [String: Color] = [:]
         for (dateKey, session) in sessions {
-            if let firstLog = session.exerciseLogs.first {
-                results[dateKey] = colorForMuscle(firstLog.exercise.musclePartName)
+            let calendar = Calendar.current
+            let sessionYear = calendar.component(.year, from: session.date)
+            if sessionYear == year {
+                if let firstLog = session.exerciseLogs.first {
+                    results[dateKey] = colorForMuscle(firstLog.exercise.musclePartName)
+                }
             }
         }
         return results
