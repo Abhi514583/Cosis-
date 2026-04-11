@@ -105,6 +105,10 @@ public struct HomeWorkoutLogView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onChange(of: selectedDate) { _ in
+                    let generator = UISelectionFeedbackGenerator()
+                    generator.selectionChanged()
+                }
             }
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: selectedDate)
             
