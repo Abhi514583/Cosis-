@@ -19,18 +19,13 @@ public struct AnalyticsView: View {
                         YearSelectorView(selectedYear: $selectedYear)
                             .padding(.horizontal, 24)
                         
-                        // 3D Model Header
+                        // Body Photo Mapper
                         VStack(alignment: .leading, spacing: 16) {
-                            Text("BODY VISUALIZER")
+                            Text("BODY MAP")
                                 .technicalMicroCopy()
                                 .foregroundColor(dataManager.primaryColor)
                             
-                            HumanBodyView { part in
-                                withAnimation {
-                                    selectedMusclePart = part
-                                }
-                            }
-                            .frame(height: 360)
+                            BodyPhotoAnalyticsView()
                             
                             WorkoutHeatmapView(year: selectedYear)
                                 .padding(.top, 16)

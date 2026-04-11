@@ -78,6 +78,42 @@ public struct ActiveWorkoutSession: Identifiable {
     public var removedPlannedExercises: Set<String> = []
 }
 
+// MARK: - Body Map Models
+
+public enum PhotoSide: String, Codable {
+    case front, back
+}
+
+public struct BodyZone: Identifiable, Codable {
+    public let id: UUID
+    public let muscleName: String
+    public let normalizedX: Double
+    public let normalizedY: Double
+    public let side: PhotoSide
+    
+    public init(id: UUID = UUID(), muscleName: String, normalizedX: Double, normalizedY: Double, side: PhotoSide) {
+        self.id = id
+        self.muscleName = muscleName
+        self.normalizedX = normalizedX
+        self.normalizedY = normalizedY
+        self.side = side
+    }
+}
+
+public struct ProgressionPhoto: Identifiable, Codable {
+    public let id: UUID
+    public let date: Date
+    public let filename: String
+    public let side: PhotoSide
+    
+    public init(id: UUID = UUID(), date: Date, filename: String, side: PhotoSide) {
+        self.id = id
+        self.date = date
+        self.filename = filename
+        self.side = side
+    }
+}
+
 public class WorkoutDataManager: ObservableObject {
     @Published public var weightUnit: WeightUnit = .kg
     @Published public var routine: [Int: RoutineEntry] = [
@@ -259,5 +295,59 @@ public class WorkoutDataManager: ObservableObject {
     
     public func colorForMuscle(_ name: String) -> Color {
         return availableParts.first(where: { $0.name == name })?.color ?? primaryColor
+    }
+    
+    // MARK: - Body Map
+    
+    @Published public var bodyZones: [BodyZone] = []
+    @Published public var progressionPhotos: [ProgressionPhoto] = []
+    
+    // Directory for storing progression images
+    private var progressionDirectory: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("progression", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+    
+    public func saveProgressionPhoto(_ image: UIImage, side: PhotoSide) {
+        let filename = "progression_\(UUID().uuidString).jpg"
+        let url = progressionDirectory.appendingPathComponent(filename)
+        if let data = image.jpegData(compressionQuality: 0.85) {
+            try? data.write(to: url)
+        }
+        let entry = ProgressionPhoto(date: Date(), filename: filename, side: side)
+        progressionPhotos.append(entry)
+    }
+    
+    public func loadImage(filename: String) -> UIImage? {
+        let url = progressionDirectory.appendingPathComponent(filename)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return UIImage(data: data)
+    }
+    
+    public func deleteProgressionPhoto(_ photo: ProgressionPhoto) {
+        let url = progressionDirectory.appendingPathComponent(photo.filename)
+        try? FileManager.default.removeItem(at: url)
+        progressionPhotos.removeAll { $0.id == photo.id }
+    }
+    
+    // Latest photo for a given side
+    public func latestPhoto(for side: PhotoSide) -> ProgressionPhoto? {
+        progressionPhotos.filter { $0.side == side }.sorted { $0.date < $1.date }.last
+    }
+    
+    public func zones(for side: PhotoSide) -> [BodyZone] {
+        bodyZones.filter { $0.side == side }
+    }
+    
+    public func addZone(_ zone: BodyZone) {
+        // Remove any existing zone for same muscle+side
+        bodyZones.removeAll { $0.muscleName == zone.muscleName && $0.side == zone.side }
+        bodyZones.append(zone)
+    }
+    
+    public func removeZone(id: UUID) {
+        bodyZones.removeAll { $0.id == id }
     }
 }
