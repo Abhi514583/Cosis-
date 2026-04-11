@@ -59,6 +59,11 @@ public struct WorkoutSet: Identifiable, Hashable {
     }
 }
 
+public struct RoutineEntry {
+    public let muscles: [MusclePart]
+    public let exercises: [(name: String, sets: [WorkoutSet])]
+}
+
 public struct ExerciseLog: Identifiable, Hashable {
     public let id = UUID()
     public let exercise: Exercise
@@ -75,11 +80,52 @@ public struct ActiveWorkoutSession: Identifiable {
 
 public class WorkoutDataManager: ObservableObject {
     @Published public var weightUnit: WeightUnit = .kg
-    @Published public var routine: [Int: [MusclePart]] = [
-        2: [MusclePart(name: "CHEST", color: Color(hex: "#FF453A"), icon: "shield.fill"), 
-            MusclePart(name: "TRICEPS", color: Color(hex: "#0A84FF"), icon: "bolt.fill")],
-        3: [MusclePart(name: "BACK", color: Color(hex: "#30D158"), icon: "figure.walk")],
-        4: [MusclePart(name: "LEGS", color: Color(hex: "#FF9F0A"), icon: "flame.fill")]
+    @Published public var routine: [Int: RoutineEntry] = [
+        2: RoutineEntry(
+            muscles: [MusclePart(name: "CHEST", color: Color(hex: "#FF453A"), icon: "shield.fill"), 
+                      MusclePart(name: "TRICEPS", color: Color(hex: "#0A84FF"), icon: "bolt.fill")],
+            exercises: [
+                ("Barbell Bench Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 135), WorkoutSet(setNumber: 2, reps: 6, weight: 155)]),
+                ("Incline Dumbbell Press", [WorkoutSet(setNumber: 1, reps: 10, weight: 65)])
+            ]
+        ),
+        3: RoutineEntry(
+            muscles: [MusclePart(name: "BACK", color: Color(hex: "#30D158"), icon: "figure.walk")],
+            exercises: [
+                ("Deadlift", [WorkoutSet(setNumber: 1, reps: 5, weight: 225)]),
+                ("Pull-ups", [WorkoutSet(setNumber: 1, reps: 12, weight: 0)])
+            ]
+        ),
+        4: RoutineEntry(
+            muscles: [MusclePart(name: "LEGS", color: Color(hex: "#FF9F0A"), icon: "flame.fill")],
+            exercises: [
+                ("Squats", [WorkoutSet(setNumber: 1, reps: 10, weight: 185)]),
+                ("Leg Press", [WorkoutSet(setNumber: 1, reps: 15, weight: 360)])
+            ]
+        ),
+        5: RoutineEntry( // Thu: Chest & Triceps Repeat
+            muscles: [MusclePart(name: "CHEST", color: Color(hex: "#FF453A"), icon: "shield.fill"), 
+                      MusclePart(name: "TRICEPS", color: Color(hex: "#0A84FF"), icon: "bolt.fill")],
+            exercises: [
+                ("Barbell Bench Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 135), WorkoutSet(setNumber: 2, reps: 6, weight: 155)]),
+                ("Incline Dumbbell Press", [WorkoutSet(setNumber: 1, reps: 10, weight: 65)])
+            ]
+        ),
+        6: RoutineEntry( // Fri: Shoulders & Biceps
+            muscles: [MusclePart(name: "SHOULDERS", color: Color(hex: "#BF5AF2"), icon: "crown.fill"),
+                      MusclePart(name: "BICEPS", color: Color(hex: "#FF375F"), icon: "dumbbell.fill")],
+            exercises: [
+                ("Overhead Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 95)]),
+                ("Bicep Curls", [WorkoutSet(setNumber: 1, reps: 12, weight: 35)])
+            ]
+        ),
+        7: RoutineEntry( // Sat: Legs Repeat
+            muscles: [MusclePart(name: "LEGS", color: Color(hex: "#FF9F0A"), icon: "flame.fill")],
+            exercises: [
+                ("Squats", [WorkoutSet(setNumber: 1, reps: 10, weight: 185)]),
+                ("Leg Press", [WorkoutSet(setNumber: 1, reps: 15, weight: 360)])
+            ]
+        )
     ]
     
     @Published public var sessions: [String: ActiveWorkoutSession] = [:]
@@ -169,16 +215,7 @@ public class WorkoutDataManager: ObservableObject {
     public func routineExercises(for date: Date) -> [(name: String, sets: [WorkoutSet])] {
         let calendar = Calendar.current
         let weekday = calendar.component(.weekday, from: date)
-        switch weekday {
-        case 2, 5: return [
-            ("Barbell Bench Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 135), WorkoutSet(setNumber: 2, reps: 6, weight: 155)]),
-            ("Incline Dumbbell Press", [WorkoutSet(setNumber: 1, reps: 10, weight: 65)])
-        ]
-        case 3: return [("Deadlift", [WorkoutSet(setNumber: 1, reps: 5, weight: 225)]), ("Pull-ups", [WorkoutSet(setNumber: 1, reps: 12, weight: 0)])]
-        case 4, 7: return [("Squats", [WorkoutSet(setNumber: 1, reps: 10, weight: 185)]), ("Leg Press", [WorkoutSet(setNumber: 1, reps: 15, weight: 360)])]
-        case 6: return [("Overhead Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 95)]), ("Bicep Curls", [WorkoutSet(setNumber: 1, reps: 12, weight: 35)])]
-        default: return []
-        }
+        return routine[weekday]?.exercises ?? []
     }
     
     public init() {}
@@ -186,6 +223,6 @@ public class WorkoutDataManager: ObservableObject {
     public func parts(for date: Date) -> [MusclePart] {
         let calendar = Calendar.current
         let weekday = calendar.component(.weekday, from: date)
-        return routine[weekday] ?? []
+        return routine[weekday]?.muscles ?? []
     }
 }

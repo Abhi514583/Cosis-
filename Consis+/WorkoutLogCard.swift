@@ -1,6 +1,7 @@
 import SwiftUI
 
 public struct WorkoutLogCard: View {
+    @EnvironmentObject var dataManager: WorkoutDataManager
     public var exerciseName: String
     public var sets: [WorkoutSet]
     
@@ -24,7 +25,7 @@ public struct WorkoutLogCard: View {
                             .foregroundColor(Theme.Colors.onSurfaceVariant)
                             .frame(width: 24, alignment: .leading)
                         
-                        Text("\(workoutSet.weight, specifier: "%.1f") kg")
+                        Text("\(workoutSet.weight, specifier: "%.1f") \(dataManager.weightUnit.rawValue.lowercased())")
                             .font(.system(size: 20, weight: .bold, design: .monospaced))
                             .foregroundColor(Theme.Colors.onSurface)
                             .frame(maxWidth: .infinity, alignment: .leading)

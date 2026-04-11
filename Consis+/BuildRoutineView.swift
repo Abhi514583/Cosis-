@@ -109,8 +109,8 @@ struct RoutineDayRow: View {
                             .font(.system(size: 14, weight: .bold, design: .rounded))
                             .foregroundColor(isExpanded ? .white : Theme.Colors.onSurfaceVariant)
                         
-                        if let parts = dataManager.routine[dayId], !parts.isEmpty {
-                            Text(parts.map({ $0.name }).joined(separator: " • "))
+                        if let entry = dataManager.routine[dayId], !entry.muscles.isEmpty {
+                            Text(entry.muscles.map({ $0.name }).joined(separator: " • "))
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundColor(dataManager.primaryColor.opacity(0.6))
                         } else {
@@ -140,7 +140,7 @@ struct RoutineDayRow: View {
                         ForEach(dataManager.availableParts) { part in
                             MuscleToggleItem(
                                 part: part,
-                                isSelected: dataManager.routine[dayId]?.contains(where: { $0.name == part.name }) ?? false,
+                                isSelected: dataManager.routine[dayId]?.muscles.contains(where: { $0.name == part.name }) ?? false,
                                 activeColor: activeGreen
                             ) {
                                 togglePart(part)
@@ -152,7 +152,7 @@ struct RoutineDayRow: View {
                     // Row Actions: Remove & Tick
                     HStack(spacing: 12) {
                         Button(action: {
-                            withAnimation { dataManager.routine[dayId] = [] }
+                            withAnimation { dataManager.routine[dayId] = RoutineEntry(muscles: [], exercises: []) }
                         }) {
                             Image(systemName: "trash.fill")
                                 .font(.system(size: 16))
@@ -187,13 +187,14 @@ struct RoutineDayRow: View {
     }
     
     private func togglePart(_ part: MusclePart) {
-        var current = dataManager.routine[dayId] ?? []
-        if let index = current.firstIndex(where: { $0.name == part.name }) {
-            current.remove(at: index)
+        let entry = dataManager.routine[dayId] ?? RoutineEntry(muscles: [], exercises: [])
+        var currentMuscles = entry.muscles
+        if let index = currentMuscles.firstIndex(where: { $0.name == part.name }) {
+            currentMuscles.remove(at: index)
         } else {
-            current.append(part)
+            currentMuscles.append(part)
         }
-        dataManager.routine[dayId] = current
+        dataManager.routine[dayId] = RoutineEntry(muscles: currentMuscles, exercises: entry.exercises)
         
         let generator = UISelectionFeedbackGenerator()
         generator.selectionChanged()

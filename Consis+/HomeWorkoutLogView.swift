@@ -209,22 +209,15 @@ struct DailyLogView: View {
         dataManager.parts(for: date)
     }
     
-    private var dailyWorkouts: [(name: String, sets: [WorkoutSet])] {
-        let weekday = Calendar.current.component(.weekday, from: date)
-        switch weekday {
-        case 2, 5: return [
-            ("Barbell Bench Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 135), WorkoutSet(setNumber: 2, reps: 6, weight: 155)]),
-            ("Incline Dumbbell Press", [WorkoutSet(setNumber: 1, reps: 10, weight: 65)])
-        ]
-        case 3: return [("Deadlift", [WorkoutSet(setNumber: 1, reps: 5, weight: 225)]), ("Pull-ups", [WorkoutSet(setNumber: 1, reps: 12, weight: 0)])]
-        case 4, 7: return [("Squats", [WorkoutSet(setNumber: 1, reps: 10, weight: 185)]), ("Leg Press", [WorkoutSet(setNumber: 1, reps: 15, weight: 360)])]
-        case 6: return [("Overhead Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 95)]), ("Bicep Curls", [WorkoutSet(setNumber: 1, reps: 12, weight: 35)])]
-        default: return []
+    private var displayWorkouts: [(name: String, sets: [WorkoutSet], muscle: String)] {
+        var merged: [(name: String, sets: [WorkoutSet], muscle: String)] = []
+        
+        // Source standard ones from centralized routine
+        let routineExercises = dataManager.routineExercises(for: date)
+        for ex in routineExercises {
+            let muscle = dataManager.exerciseLibrary.first(where: { $0.name == ex.name })?.musclePartName ?? "OTHER"
+            merged.append((name: ex.name, sets: ex.sets, muscle: muscle))
         }
-    }
-    
-    private var displayWorkouts: [(name: String, sets: [WorkoutSet])] {
-        var merged = dailyWorkouts
         
         if let session = dataManager.session(for: date) {
             var activeExerciseNames = Set<String>()
@@ -239,12 +232,24 @@ struct DailyLogView: View {
             
             // Add any extra exercises they logged outside the template
             for log in session.exerciseLogs {
-                if !activeExerciseNames.contains(log.exercise.name) {
-                    merged.append((name: log.exercise.name, sets: log.sets))
+                if !activeExerciseNames.contains(log.exercise.name) && !session.removedPlannedExercises.contains(log.exercise.name) {
+                    merged.append((name: log.exercise.name, sets: log.sets, muscle: log.exercise.musclePartName))
                 }
             }
+            
+            // Remove planned exercises that were explicitly deleted
+            merged.removeAll(where: { session.removedPlannedExercises.contains($0.name) && $0.sets.isEmpty })
         }
         return merged
+    }
+    
+    private var groupedWorkouts: [(muscle: String, exercises: [(name: String, sets: [WorkoutSet])])] {
+        let all = displayWorkouts
+        let keys = Array(Set(all.map { $0.muscle })).sorted()
+        return keys.map { key in
+            let exercises = all.filter { $0.muscle == key }.map { (name: $0.name, sets: $0.sets) }
+            return (muscle: key, exercises: exercises)
+        }
     }
     private var isCompleted: Bool {
         if let session = dataManager.session(for: date), !session.exerciseLogs.isEmpty {
@@ -311,21 +316,40 @@ struct DailyLogView: View {
                     .buttonStyle(ScaleButtonStyle()).padding(.horizontal, 24).padding(.top, 8)
                     
                     if isExerciseListVisible {
-                        VStack(spacing: 12) {
-                            ForEach(displayWorkouts, id: \.name) { workout in
-                                WorkoutLogCard(exerciseName: workout.name, sets: workout.sets)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        let fallback = Exercise(name: workout.name, musclePartName: "CUSTOM")
-                                        var resolvedEx = dataManager.exerciseLibrary.first(where: { $0.name == workout.name }) ?? fallback
-                                        if !workout.sets.isEmpty {
-                                            resolvedEx.previousSets = workout.sets
-                                            if let maxW = workout.sets.map({ $0.weight }).max(), resolvedEx.maxWeight == 0 {
-                                                resolvedEx.maxWeight = maxW
-                                            }
+                        VStack(spacing: 24) {
+                            ForEach(groupedWorkouts, id: \.muscle) { group in
+                                VStack(alignment: .leading, spacing: 12) {
+                                    // Muscle Group Header
+                                    HStack(spacing: 12) {
+                                        Text(group.muscle)
+                                            .font(.system(size: 12, weight: .black, design: .rounded))
+                                            .kerning(1.2)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 10).padding(.vertical, 4)
+                                            .background(dataManager.availableParts.first(where: { $0.name == group.muscle })?.color.opacity(0.3) ?? Color.gray.opacity(0.3))
+                                            .clipShape(Capsule())
+                                        
+                                        Rectangle().fill(Color.white.opacity(0.05)).frame(height: 1)
+                                    }.padding(.horizontal, 24)
+                                    
+                                    VStack(spacing: 12) {
+                                        ForEach(group.exercises, id: \.name) { workout in
+                                            WorkoutLogCard(exerciseName: workout.name, sets: workout.sets)
+                                                .contentShape(Rectangle())
+                                                .onTapGesture {
+                                                    let fallback = Exercise(name: workout.name, musclePartName: group.muscle)
+                                                    var resolvedEx = dataManager.exerciseLibrary.first(where: { $0.name == workout.name }) ?? fallback
+                                                    if !workout.sets.isEmpty {
+                                                        resolvedEx.previousSets = workout.sets
+                                                        if let maxW = workout.sets.map({ $0.weight }).max(), resolvedEx.maxWeight == 0 {
+                                                            resolvedEx.maxWeight = maxW
+                                                        }
+                                                    }
+                                                    onQuickLog?(resolvedEx)
+                                                }
                                         }
-                                        onQuickLog?(resolvedEx)
                                     }
+                                }
                             }
                             
                             // Thumb-friendly close button at the bottom of the long list
