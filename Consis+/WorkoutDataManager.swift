@@ -225,4 +225,21 @@ public class WorkoutDataManager: ObservableObject {
         let weekday = calendar.component(.weekday, from: date)
         return routine[weekday]?.muscles ?? []
     }
+
+    public func exercises(for musclePart: String) -> [Exercise] {
+        return exerciseLibrary.filter { $0.musclePartName == musclePart }
+    }
+    
+    public func history(for exerciseName: String) -> [(date: Date, volume: Double, maxWeight: Double)] {
+        var results: [(date: Date, volume: Double, maxWeight: Double)] = []
+        let sortedSessions = sessions.values.sorted { $0.date < $1.date }
+        for session in sortedSessions {
+            if let log = session.exerciseLogs.first(where: { $0.exercise.name == exerciseName }) {
+                let volume = log.sets.reduce(0.0) { $0 + ($1.weight * Double($1.reps)) }
+                let maxW = log.sets.map { $0.weight }.max() ?? 0.0
+                results.append((date: session.date, volume: volume, maxWeight: maxW))
+            }
+        }
+        return results
+    }
 }
