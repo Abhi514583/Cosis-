@@ -15,8 +15,8 @@ public struct AnalyticsView: View {
                 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 32) {
-                        // Year Toggle
-                        YearToggleView(selectedYear: $selectedYear)
+                        // Year Selector
+                        YearSelectorView(selectedYear: $selectedYear)
                             .padding(.horizontal, 24)
                         
                         // 3D Model Header
@@ -80,30 +80,43 @@ public struct AnalyticsView: View {
     }
 }
 
-struct YearToggleView: View {
+struct YearSelectorView: View {
     @Binding var selectedYear: Int
     @EnvironmentObject var dataManager: WorkoutDataManager
     let years = [2024, 2025, 2026]
     
     var body: some View {
-        HStack(spacing: 8) {
+        Menu {
             ForEach(years, id: \.self) { year in
                 Button(action: {
                     withAnimation(.spring()) {
                         selectedYear = year
                     }
                 }) {
-                    Text("\(year)")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundColor(selectedYear == year ? .black : .white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(selectedYear == year ? dataManager.primaryColor : Theme.Colors.surfaceContainerHigh)
-                        .clipShape(Capsule())
-                        .shadow(color: selectedYear == year ? dataManager.primaryColor.opacity(0.3) : .clear, radius: 8)
+                    HStack {
+                        Text("\(year)")
+                        if selectedYear == year {
+                            Image(systemName: "checkmark")
+                        }
+                    }
                 }
             }
-            Spacer()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "calendar")
+                    .foregroundColor(dataManager.primaryColor)
+                Text("\(selectedYear)")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.gray)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Theme.Colors.surfaceContainerHigh)
+            .clipShape(Capsule())
+            .ghostBorder(radius: 20)
         }
     }
 }
