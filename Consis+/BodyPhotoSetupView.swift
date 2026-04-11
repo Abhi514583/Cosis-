@@ -62,6 +62,7 @@ struct BodyPhotoSetupView: View {
                                 .contentShape(Rectangle())
                                 .onTapGesture { location in
                                     pendingZonePoint = location
+                                    pendingGeoSize = geo.size
                                     showMuscleChips = true
                                 }
                             

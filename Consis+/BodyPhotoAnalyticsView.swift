@@ -73,13 +73,10 @@ struct BodyPhotoAnalyticsView: View {
                             let y = zone.normalizedY * geo.size.height
                             let color = dataManager.colorForMuscle(zone.muscleName)
                             
-                            ZoneMarker(muscleName: zone.muscleName, color: color)
-                                .position(x: x, y: y)
-                                .onTapGesture {
-                                    let gen = UIImpactFeedbackGenerator(style: .medium)
-                                    gen.impactOccurred()
-                                    selectedMusclePart = zone.muscleName
-                                }
+                            ZoneMarker(muscleName: zone.muscleName, color: color) {
+                                selectedMusclePart = zone.muscleName
+                            }
+                            .position(x: x, y: y)
                         }
                     }
                 }
@@ -137,6 +134,9 @@ struct BodyPhotoAnalyticsView: View {
         )) { item in
             AnalyticsDetailView(musclePart: item.name)
                 .environmentObject(dataManager)
+                .presentationDetents([.fraction(0.85), .large])
+                .presentationCornerRadius(32)
+                .presentationDragIndicator(.hidden)
         }
         .sheet(isPresented: $showGallery) {
             ProgressionGalleryView(side: activeSide)
@@ -150,29 +150,43 @@ struct BodyPhotoAnalyticsView: View {
 struct ZoneMarker: View {
     let muscleName: String
     let color: Color
+    let action: () -> Void
+    
     @State private var isPulsing = false
+    @State private var isTapped = false
     
     var body: some View {
         ZStack {
-            // Pulse ring
+            // Pulse ring + Tap Explosion
             Circle()
-                .fill(color.opacity(0.25))
-                .frame(width: isPulsing ? 52 : 40, height: isPulsing ? 52 : 40)
-                .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: isPulsing)
+                .fill(color.opacity(isTapped ? 0.0 : 0.4))
+                .frame(width: isTapped ? 90 : (isPulsing ? 64 : 44), 
+                       height: isTapped ? 90 : (isPulsing ? 64 : 44))
+                .animation(isTapped ? .easeOut(duration: 0.4) : .easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: isTapped ? isTapped : isPulsing)
             
             // Main dot
             Circle()
                 .fill(color)
-                .frame(width: 24, height: 24)
-                .overlay(Circle().stroke(.white.opacity(0.8), lineWidth: 1.5))
-                .shadow(color: color.opacity(0.6), radius: 6)
+                .frame(width: isTapped ? 36 : 28, height: isTapped ? 36 : 28)
+                .overlay(Circle().stroke(.white, lineWidth: 2.5))
+                .shadow(color: color, radius: isTapped ? 16 : 8)
+                .animation(.spring(response: 0.2, dampingFraction: 0.5), value: isTapped)
             
             // Label
-            Text(String(muscleName.prefix(2)))
-                .font(.system(size: 8, weight: .black))
+            Text(String(muscleName.prefix(2)).uppercased())
+                .font(.system(size: 10, weight: .black, design: .rounded))
                 .foregroundColor(.white)
         }
         .onAppear { isPulsing = true }
+        .onTapGesture {
+            let gen = UIImpactFeedbackGenerator(style: .heavy)
+            gen.impactOccurred()
+            isTapped = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                isTapped = false
+                action()
+            }
+        }
     }
 }
 
