@@ -410,6 +410,7 @@ struct TableLoggerView: View {
     @State private var weightInput: String = ""
     @State private var repsInput: String = ""
     @State private var editingSetId: UUID? = nil
+    @State private var showHistory: Bool = false
     @FocusState private var focusedField: Field?
     
     enum Field { case weight, reps }
@@ -452,11 +453,33 @@ struct TableLoggerView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     // NEW PR Title Display
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(exercise.name)
-                            .font(.system(size: 32, weight: .heavy, design: .rounded))
-                            .foregroundColor(.white)
-                            .lineLimit(2)
-                            .padding(.horizontal, 24)
+                        HStack(alignment: .center, spacing: 12) {
+                            Text(exercise.name)
+                                .font(.system(size: 32, weight: .heavy, design: .rounded))
+                                .foregroundColor(.white)
+                                .lineLimit(2)
+                            
+                            // History Chip
+                            Button(action: {
+                                let gen = UIImpactFeedbackGenerator(style: .light)
+                                gen.impactOccurred()
+                                showHistory = true
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chart.line.uptrend.xyaxis")
+                                        .font(.system(size: 10, weight: .bold))
+                                    Text("HISTORY")
+                                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                                }
+                                .foregroundColor(dataManager.primaryColor)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(dataManager.primaryColor.opacity(0.15))
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(dataManager.primaryColor.opacity(0.3), lineWidth: 1))
+                            }
+                        }
+                        .padding(.horizontal, 24)
                         
                         HStack {
                             // Convert maxWeight to CURRENT unit for display
@@ -474,6 +497,7 @@ struct TableLoggerView: View {
                         }
                         .padding(.horizontal, 24)
                     }
+
                     
                     VStack(spacing: 0) {
                         // Table Header
@@ -658,6 +682,13 @@ struct TableLoggerView: View {
         }
         .onDisappear {
             focusedField = nil
+        }
+        .sheet(isPresented: $showHistory) {
+            ExerciseHistorySheet(exercise: exercise, onSeeMore: nil)
+                .environmentObject(dataManager)
+                .presentationDetents([.fraction(0.7), .large])
+                .presentationDragIndicator(.hidden)
+                .presentationBackground(Theme.Colors.surface)
         }
     }
     
