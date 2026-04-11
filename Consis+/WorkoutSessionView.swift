@@ -536,7 +536,24 @@ struct TableLoggerView: View {
                         
                         HStack {
                             Text("\(nextSetNum)").frame(width: 40, alignment: .center).font(.system(size: 14, weight: .black)).foregroundColor(editingSetId != nil ? .orange : .white)
-                            Text(previousDataString(for: nextSetNum)).frame(maxWidth: .infinity, alignment: .center).font(.system(size: 12, weight: .bold)).foregroundColor(.gray.opacity(0.5)).lineLimit(1)
+                            Text(nextSetNum <= exercise.previousSets.count ? previousDataString(for: nextSetNum) : "-")
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.gray.opacity(0.5))
+                                .lineLimit(1)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    if nextSetNum <= exercise.previousSets.count {
+                                        let pSet = exercise.previousSets[nextSetNum - 1]
+                                        // Convert from KG (library) to current unit
+                                        let convertedW = dataManager.weightUnit.convert(pSet.weight, from: .kg)
+                                        weightInput = String(format: "%.1f", convertedW).replacingOccurrences(of: ".0", with: "")
+                                        repsInput = "\(pSet.reps)"
+                                        
+                                        let gen = UIImpactFeedbackGenerator(style: .medium)
+                                        gen.impactOccurred()
+                                    }
+                                }
                             
                             TextField("-", text: $weightInput)
                                 .keyboardType(.decimalPad).focused($focusedField, equals: .weight).multilineTextAlignment(.center)
@@ -632,7 +649,6 @@ struct TableLoggerView: View {
             }
         }
         .onAppear {
-            populatePrevious()
             // Make focus immediate to prevent transition lag feeling!
             if weightInput.isEmpty {
                 focusedField = .weight
@@ -655,30 +671,7 @@ struct TableLoggerView: View {
         return "-"
     }
     
-    private func populatePrevious() {
-        let loggedSets = dataManager.session(for: sessionDate)?.exerciseLogs.first(where: { $0.exercise.id == exercise.id })?.sets ?? []
-        let nextSetNum = (loggedSets.last?.setNumber ?? 0) + 1
-        
-        var suggestedW: Double? = nil
-        
-        if nextSetNum - 1 < exercise.previousSets.count {
-            suggestedW = exercise.previousSets[nextSetNum - 1].weight
-        } else if let lastLogged = loggedSets.last {
-            // Carry over the weight from the most recent set logged TODAY
-            suggestedW = lastLogged.weight
-        }
-        
-        if let w = suggestedW {
-            if w > 0 {
-                // If suggested weight comes from today's log, it might be in current unit. 
-                // However, populatePrevious is often called after unit change, so we should ensure consistency.
-                // For now, let's assume the weight input logic handles current unit values.
-                weightInput = String(format: "%.1f", w).replacingOccurrences(of: ".0", with: "")
-            } else {
-                weightInput = "" // Clear for bodyweight
-            }
-        }
-    }
+
     
     private func logSet() {
         let w = Double(weightInput) ?? 0.0
@@ -710,9 +703,10 @@ struct TableLoggerView: View {
         
         dataManager.saveSession(currentSession, for: sessionDate)
         
+        weightInput = ""
         repsInput = ""
         focusedField = .weight
-        populatePrevious()
+        
         let gen = UINotificationFeedbackGenerator()
         gen.notificationOccurred(.success)
     }
