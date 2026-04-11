@@ -26,6 +26,9 @@ public struct AnalyticsView: View {
                                 }
                             }
                             .frame(height: 400)
+                            
+                            WorkoutHeatmapView()
+                                .padding(.top, 16)
                         }
                         .padding(.horizontal, 24)
                         

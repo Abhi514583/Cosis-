@@ -242,4 +242,18 @@ public class WorkoutDataManager: ObservableObject {
         }
         return results
     }
+    
+    public func heatmapData() -> [String: Color] {
+        var results: [String: Color] = [:]
+        for (dateKey, session) in sessions {
+            if let firstLog = session.exerciseLogs.first {
+                results[dateKey] = colorForMuscle(firstLog.exercise.musclePartName)
+            }
+        }
+        return results
+    }
+    
+    public func colorForMuscle(_ name: String) -> Color {
+        return availableParts.first(where: { $0.name == name })?.color ?? primaryColor
+    }
 }
