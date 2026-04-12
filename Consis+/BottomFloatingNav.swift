@@ -27,21 +27,6 @@ public struct BottomFloatingNav: View {
                     NavItem(icon: "doc.plaintext", title: "Log", index: 0, selectedIndex: $selectedTab)
                     Spacer()
                     
-                    // NEW CALENDAR BUTTON
-                    Button(action: {
-                        isCalendarOpen = true
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "calendar")
-                                .font(.system(size: 20))
-                            Text("Calendar")
-                                .font(Typography.labelSmall)
-                        }
-                        .foregroundColor(Theme.Colors.onSurfaceVariant.opacity(0.6))
-                    }
-                    
-                    Spacer()
-                    
                     // Center PLUS button
                     Button(action: {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -52,7 +37,7 @@ public struct BottomFloatingNav: View {
                             .font(.system(size: 24, weight: .bold))
                             .foregroundColor(.white)
                             .rotationEffect(.degrees(isPlusMenuOpen ? 45 : 0))
-                            .frame(width: 56, height: 48) // Slightly narrower for 4-item squeeze
+                            .frame(width: 64, height: 48)
                             .background(isPlusMenuOpen ? Theme.Colors.primaryContainer : Theme.Colors.surfaceContainerHigh)
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                             .shadow(color: isPlusMenuOpen ? Theme.Colors.primaryContainer.opacity(0.3) : .clear, radius: 10)

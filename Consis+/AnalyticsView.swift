@@ -4,6 +4,7 @@ public struct AnalyticsView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @State private var selectedMusclePart: String? = nil
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
+    @Binding var isCalendarOpen: Bool
     
     public var body: some View {
         ZStack {
@@ -15,9 +16,27 @@ public struct AnalyticsView: View {
                 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 32) {
-                        // Year Selector
-                        YearSelectorView(selectedYear: $selectedYear)
-                            .padding(.horizontal, 24)
+                        // Year Selector & Full History Button
+                        HStack {
+                            YearSelectorView(selectedYear: $selectedYear)
+                            
+                            Spacer()
+                            
+                            Button(action: { isCalendarOpen = true }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                    Text("FULL HISTORY")
+                                        .font(.system(size: 12, weight: .black, design: .rounded))
+                                }
+                                .foregroundColor(dataManager.primaryColor)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(Theme.Colors.surfaceContainerHigh)
+                                .clipShape(Capsule())
+                                .ghostBorder(radius: 20)
+                            }
+                        }
+                        .padding(.horizontal, 24)
                         
                         // Body Photo Mapper
                         VStack(alignment: .leading, spacing: 16) {
@@ -125,5 +144,6 @@ struct MuscleSheetItem: Identifiable {
 
 
 #Preview {
-    AnalyticsView()
+    AnalyticsView(isCalendarOpen: .constant(false))
+        .environmentObject(WorkoutDataManager())
 }

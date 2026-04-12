@@ -24,7 +24,7 @@ struct ContentView: View {
                         isStartingWorkout = true
                     })
                 case 1:
-                    AnalyticsView()
+                    AnalyticsView(isCalendarOpen: $isCalendarOpen)
                 default:
                     HomeWorkoutLogView(selectedDate: $selectedDate, onQuickLog: { ex in
                         initialExercise = ex
