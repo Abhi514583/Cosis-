@@ -45,15 +45,16 @@ public struct AnalyticsView: View {
                                         let calendar = Calendar.current
                                         if calendar.component(.year, from: acc.date) == selectedYear {
                                             return sess + acc.exerciseLogs.reduce(0.0) { log, accLog in
-                                                log + accLog.sets.reduce(0.0) { $0 + ($1.weight * Double($1.reps)) }
+                                                log + accLog.sets.reduce(0.0) { $0 + ($1.weightKg * Double($1.reps)) }
                                             }
                                         }
                                         return sess
                                     }
-                                    Text("\(String(format: "%.1f", totalVol / 1000.0))")
+                                    let convertedTotalVol = dataManager.weightUnit.convert(totalVol, from: .kg)
+                                    Text("\(String(format: "%.1f", convertedTotalVol / 1000.0))")
                                         .font(Typography.displayLarge)
                                         .foregroundColor(Theme.Colors.primary)
-                                    Text("k lbs")
+                                    Text("k \(dataManager.weightUnit.rawValue.lowercased())")
                                         .font(Typography.titleLarge)
                                         .foregroundColor(Theme.Colors.onSurfaceVariant)
                                 }

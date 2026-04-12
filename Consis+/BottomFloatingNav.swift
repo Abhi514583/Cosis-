@@ -3,6 +3,7 @@ import SwiftUI
 public struct BottomFloatingNav: View {
     @Binding public var selectedTab: Int
     @Binding public var isPlusMenuOpen: Bool
+    @Binding public var isCalendarOpen: Bool
     @Binding public var selectedDate: Date
     @EnvironmentObject var dataManager: WorkoutDataManager
     
@@ -10,9 +11,10 @@ public struct BottomFloatingNav: View {
         Calendar.current.isDateInToday(selectedDate)
     }
     
-    public init(selectedTab: Binding<Int>, isPlusMenuOpen: Binding<Bool>, selectedDate: Binding<Date>) {
+    public init(selectedTab: Binding<Int>, isPlusMenuOpen: Binding<Bool>, isCalendarOpen: Binding<Bool>, selectedDate: Binding<Date>) {
         self._selectedTab = selectedTab
         self._isPlusMenuOpen = isPlusMenuOpen
+        self._isCalendarOpen = isCalendarOpen
         self._selectedDate = selectedDate
     }
     
@@ -25,6 +27,21 @@ public struct BottomFloatingNav: View {
                     NavItem(icon: "doc.plaintext", title: "Log", index: 0, selectedIndex: $selectedTab)
                     Spacer()
                     
+                    // NEW CALENDAR BUTTON
+                    Button(action: {
+                        isCalendarOpen = true
+                    }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 20))
+                            Text("Calendar")
+                                .font(Typography.labelSmall)
+                        }
+                        .foregroundColor(Theme.Colors.onSurfaceVariant.opacity(0.6))
+                    }
+                    
+                    Spacer()
+                    
                     // Center PLUS button
                     Button(action: {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -35,7 +52,7 @@ public struct BottomFloatingNav: View {
                             .font(.system(size: 24, weight: .bold))
                             .foregroundColor(.white)
                             .rotationEffect(.degrees(isPlusMenuOpen ? 45 : 0))
-                            .frame(width: 64, height: 48)
+                            .frame(width: 56, height: 48) // Slightly narrower for 4-item squeeze
                             .background(isPlusMenuOpen ? Theme.Colors.primaryContainer : Theme.Colors.surfaceContainerHigh)
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                             .shadow(color: isPlusMenuOpen ? Theme.Colors.primaryContainer.opacity(0.3) : .clear, radius: 10)
@@ -113,7 +130,7 @@ struct NavItem: View {
 }
 
 #Preview {
-    BottomFloatingNav(selectedTab: .constant(0), isPlusMenuOpen: .constant(false), selectedDate: .constant(Date()))
+    BottomFloatingNav(selectedTab: .constant(0), isPlusMenuOpen: .constant(false), isCalendarOpen: .constant(false), selectedDate: .constant(Date()))
         .environmentObject(WorkoutDataManager())
         .frame(maxHeight: .infinity, alignment: .bottom)
         .background(Theme.Colors.surface)

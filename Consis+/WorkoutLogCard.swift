@@ -25,7 +25,8 @@ public struct WorkoutLogCard: View {
                             .foregroundColor(Theme.Colors.onSurfaceVariant)
                             .frame(width: 24, alignment: .leading)
                         
-                        Text("\(workoutSet.weight, specifier: "%.1f") \(dataManager.weightUnit.rawValue.lowercased())")
+                        let convertedW = dataManager.weightUnit.convert(workoutSet.weightKg, from: .kg)
+                        Text("\(convertedW, specifier: "%.1f") \(dataManager.weightUnit.rawValue.lowercased())")
                             .font(.system(size: 20, weight: .bold, design: .monospaced))
                             .foregroundColor(Theme.Colors.onSurface)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -59,9 +60,9 @@ public struct WorkoutLogCard: View {
 
 #Preview {
     WorkoutLogCard(exerciseName: "Barbell Bench Press", sets: [
-        WorkoutSet(setNumber: 1, reps: 8, weight: 60),
-        WorkoutSet(setNumber: 2, reps: 6, weight: 70),
-        WorkoutSet(setNumber: 3, reps: 5, weight: 75, isPR: true)
+        WorkoutSet(setNumber: 1, reps: 8, weightKg: 60),
+        WorkoutSet(setNumber: 2, reps: 6, weightKg: 70),
+        WorkoutSet(setNumber: 3, reps: 5, weightKg: 75, isPR: true)
     ])
     .background(Theme.Colors.surface)
 }

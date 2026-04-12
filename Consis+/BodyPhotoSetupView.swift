@@ -38,11 +38,17 @@ struct BodyPhotoSetupView: View {
                     }
                     Spacer()
                     Button(action: {
+                        // Phase 8 fix: Only persist on explicit save action
+                        if capturedImage != nil && selectedItem != nil {
+                            if let img = capturedImage {
+                                dataManager.saveProgressionPhoto(img, side: side)
+                            }
+                        }
                         dismiss()
                     }) {
                         Text("SAVE")
                             .font(.system(size: 14, weight: .black, design: .rounded))
-                            .foregroundColor(capturedImage != nil ? dataManager.primaryColor : .gray)
+                            .foregroundColor((capturedImage != nil && selectedItem != nil) || editingMode ? dataManager.primaryColor : .gray)
                     }
                     .disabled(capturedImage == nil)
                 }
@@ -180,7 +186,6 @@ struct BodyPhotoSetupView: View {
                 if let data = try? await item?.loadTransferable(type: Data.self),
                    let ui = UIImage(data: data) {
                     capturedImage = ui
-                    dataManager.saveProgressionPhoto(ui, side: side)
                 }
             }
         }

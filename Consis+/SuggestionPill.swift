@@ -26,7 +26,7 @@ public enum SuggestionType: Int, CaseIterable {
 
 public struct SuggestionPill: View {
 
-    let baseWeight: Double
+    let baseWeightKg: Double
     let baseReps: Int
     var onTap: ((Double, Int) -> Void)? = nil
     @EnvironmentObject var dataManager: WorkoutDataManager
@@ -36,8 +36,8 @@ public struct SuggestionPill: View {
     @State private var showInfoAlert = false
     @AppStorage("hasHiddenSuggestionInfo") private var hasHiddenSuggestionInfo = false
     
-    public init(baseWeight: Double, baseReps: Int, onTap: ((Double, Int) -> Void)? = nil) {
-        self.baseWeight = baseWeight
+    public init(baseWeightKg: Double, baseReps: Int, onTap: ((Double, Int) -> Void)? = nil) {
+        self.baseWeightKg = baseWeightKg
         self.baseReps = baseReps
         self.onTap = onTap
     }
@@ -47,7 +47,7 @@ public struct SuggestionPill: View {
     }
     
     private var displayWeight: Double {
-        currentType.calculateWeight(base: baseWeight, unit: dataManager.weightUnit)
+        currentType.calculateWeight(base: baseWeightKg, unit: dataManager.weightUnit)
     }
     
     // Simplistic logic to vary reps or just keep them same
@@ -156,8 +156,8 @@ public struct SuggestionPill: View {
 
 #Preview {
     VStack(spacing: 20) {
-        SuggestionPill(baseWeight: 100, baseReps: 10)
-        SuggestionPill(baseWeight: 80, baseReps: 8)
+        SuggestionPill(baseWeightKg: 100, baseReps: 10)
+        SuggestionPill(baseWeightKg: 80, baseReps: 8)
     }
     .padding()
     .background(Theme.Colors.surfaceContainerLow)

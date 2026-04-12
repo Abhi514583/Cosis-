@@ -26,17 +26,24 @@ public enum WeightUnit: String, Codable, CaseIterable, Hashable {
 }
 
 public struct Exercise: Identifiable, Hashable {
-    public let id = UUID()
+    public var id: UUID
     public let name: String
     public let musclePartName: String
-    public var usageCount: Int
-    public var maxWeight: Double // All-time PR
-    public var lastPerformance: String // Fallback string
-    public var previousSets: [WorkoutSet] // For set-by-set mapping
+    public let isCustom: Bool
     
-    public init(name: String, musclePartName: String, usageCount: Int = 0, maxWeight: Double = 0, lastPerformance: String = "-", previousSets: [WorkoutSet] = []) {
+    // Derived/volatile stats for UI logic
+    public var usageCount: Int
+    public var maxWeight: Double
+    public var lastPerformance: String
+    
+    // For "Active Session" tracking of what was planned
+    public var previousSets: [WorkoutSet]
+    
+    public init(id: UUID = UUID(), name: String, musclePartName: String, isCustom: Bool = false, usageCount: Int = 0, maxWeight: Double = 0, lastPerformance: String = "-", previousSets: [WorkoutSet] = []) {
+        self.id = id
         self.name = name
         self.musclePartName = musclePartName
+        self.isCustom = isCustom
         self.usageCount = usageCount
         self.maxWeight = maxWeight
         self.lastPerformance = lastPerformance
@@ -48,27 +55,26 @@ public struct WorkoutSet: Identifiable, Hashable {
     public let id = UUID()
     public var setNumber: Int
     public var reps: Int
-    public var weight: Double
+    public var weightKg: Double
     public var isPR: Bool = false
     
-    public init(setNumber: Int, reps: Int, weight: Double, isPR: Bool = false) {
+    public init(setNumber: Int, reps: Int, weightKg: Double, isPR: Bool = false) {
         self.setNumber = setNumber
         self.reps = reps
-        self.weight = weight
+        self.weightKg = weightKg
         self.isPR = isPR
     }
 }
 
 public struct RoutineEntry {
     public let muscles: [MusclePart]
-    public let exercises: [(name: String, sets: [WorkoutSet])]
+    public let exercises: [(exercise: Exercise, sets: [WorkoutSet])]
 }
 
 public struct ExerciseLog: Identifiable, Hashable {
     public let id = UUID()
     public let exercise: Exercise
     public var sets: [WorkoutSet]
-    public var unit: WeightUnit = .kg
 }
 
 public struct ActiveWorkoutSession: Identifiable {
@@ -76,6 +82,7 @@ public struct ActiveWorkoutSession: Identifiable {
     public var date: Date
     public var exerciseLogs: [ExerciseLog] = []
     public var removedPlannedExercises: Set<String> = []
+    public var isFinished: Bool = false
 }
 
 // MARK: - Body Map Models
@@ -114,93 +121,20 @@ public struct ProgressionPhoto: Identifiable, Codable {
     }
 }
 
+import SwiftData
+
+@MainActor
 public class WorkoutDataManager: ObservableObject {
+    private var modelContext: ModelContext?
+    
+    public init(modelContext: ModelContext? = nil) {
+        self.modelContext = modelContext
+        loadInitialState()
+    }
+    
     @Published public var weightUnit: WeightUnit = .kg
-    @Published public var routine: [Int: RoutineEntry] = [
-        2: RoutineEntry(
-            muscles: [MusclePart(name: "CHEST", color: Color(hex: "#FF453A"), icon: "shield.fill"), 
-                      MusclePart(name: "TRICEPS", color: Color(hex: "#0A84FF"), icon: "bolt.fill")],
-            exercises: [
-                ("Barbell Bench Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 135), WorkoutSet(setNumber: 2, reps: 6, weight: 155)]),
-                ("Incline Dumbbell Press", [WorkoutSet(setNumber: 1, reps: 10, weight: 65)])
-            ]
-        ),
-        3: RoutineEntry(
-            muscles: [MusclePart(name: "BACK", color: Color(hex: "#30D158"), icon: "figure.walk")],
-            exercises: [
-                ("Deadlift", [WorkoutSet(setNumber: 1, reps: 5, weight: 225)]),
-                ("Pull-ups", [WorkoutSet(setNumber: 1, reps: 12, weight: 0)])
-            ]
-        ),
-        4: RoutineEntry(
-            muscles: [MusclePart(name: "LEGS", color: Color(hex: "#FF9F0A"), icon: "flame.fill")],
-            exercises: [
-                ("Squats", [WorkoutSet(setNumber: 1, reps: 10, weight: 185)]),
-                ("Leg Press", [WorkoutSet(setNumber: 1, reps: 15, weight: 360)])
-            ]
-        ),
-        5: RoutineEntry( // Thu: Chest & Triceps Repeat
-            muscles: [MusclePart(name: "CHEST", color: Color(hex: "#FF453A"), icon: "shield.fill"), 
-                      MusclePart(name: "TRICEPS", color: Color(hex: "#0A84FF"), icon: "bolt.fill")],
-            exercises: [
-                ("Barbell Bench Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 135), WorkoutSet(setNumber: 2, reps: 6, weight: 155)]),
-                ("Incline Dumbbell Press", [WorkoutSet(setNumber: 1, reps: 10, weight: 65)])
-            ]
-        ),
-        6: RoutineEntry( // Fri: Shoulders & Biceps
-            muscles: [MusclePart(name: "SHOULDERS", color: Color(hex: "#BF5AF2"), icon: "crown.fill"),
-                      MusclePart(name: "BICEPS", color: Color(hex: "#FF375F"), icon: "dumbbell.fill")],
-            exercises: [
-                ("Overhead Press", [WorkoutSet(setNumber: 1, reps: 8, weight: 95)]),
-                ("Bicep Curls", [WorkoutSet(setNumber: 1, reps: 12, weight: 35)])
-            ]
-        ),
-        7: RoutineEntry( // Sat: Legs Repeat
-            muscles: [MusclePart(name: "LEGS", color: Color(hex: "#FF9F0A"), icon: "flame.fill")],
-            exercises: [
-                ("Squats", [WorkoutSet(setNumber: 1, reps: 10, weight: 185)]),
-                ("Leg Press", [WorkoutSet(setNumber: 1, reps: 15, weight: 360)])
-            ]
-        )
-    ]
-    
+    @Published public var routine: [Int: RoutineEntry] = [:]
     @Published public var sessions: [String: ActiveWorkoutSession] = [:]
-    
-    public func session(for date: Date) -> ActiveWorkoutSession? {
-        return sessions[dateKey(date)]
-    }
-    
-    public func saveSession(_ session: ActiveWorkoutSession, for date: Date) {
-        sessions[dateKey(date)] = session
-    }
-    
-    public func deleteExerciseLog(name: String, for date: Date) {
-        if var current = session(for: date) {
-            // Remove from logs if it exists
-            current.exerciseLogs.removeAll(where: { $0.exercise.name == name })
-            // Also mark as removed from planned routine for this session
-            current.removedPlannedExercises.insert(name)
-            saveSession(current, for: date)
-        }
-    }
-    
-    public func deleteWorkoutSet(exerciseId: UUID, setId: UUID, for date: Date) {
-        if var current = session(for: date),
-           let idx = current.exerciseLogs.firstIndex(where: { $0.exercise.id == exerciseId }) {
-            current.exerciseLogs[idx].sets.removeAll(where: { $0.id == setId })
-            // Re-order set numbers
-            for i in 0..<current.exerciseLogs[idx].sets.count {
-                current.exerciseLogs[idx].sets[i].setNumber = i + 1
-            }
-            saveSession(current, for: date)
-        }
-    }
-    
-    public func dateKey(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: date)
-    }
     
     // Theme Customization
     @Published public var primaryColor: Color = Color(hex: "#C4524D") // Crimson
@@ -216,45 +150,278 @@ public class WorkoutDataManager: ObservableObject {
         MusclePart(name: "CARDIO", color: Color(hex: "#32ADE6"), icon: "heart.fill")
     ]
     
-    @Published public var exerciseLibrary = [
-        Exercise(name: "Barbell Bench Press", musclePartName: "CHEST", usageCount: 50, maxWeight: 100, lastPerformance: "80 KG x 10", previousSets: [
-            WorkoutSet(setNumber: 1, reps: 10, weight: 80),
-            WorkoutSet(setNumber: 2, reps: 8, weight: 80),
-            WorkoutSet(setNumber: 3, reps: 6, weight: 85)
-        ]),
-        Exercise(name: "Incline Dumbbell Press", musclePartName: "CHEST", usageCount: 30, maxWeight: 40, lastPerformance: "35 KG x 8"),
-        Exercise(name: "Cable Crossovers", musclePartName: "CHEST", usageCount: 10, maxWeight: 25, lastPerformance: "20 KG x 15"),
-        Exercise(name: "Deadlift", musclePartName: "BACK", usageCount: 45, maxWeight: 180, lastPerformance: "140 KG x 5", previousSets: [
-            WorkoutSet(setNumber: 1, reps: 5, weight: 140),
-            WorkoutSet(setNumber: 2, reps: 3, weight: 150)
-        ]),
-        Exercise(name: "Pull-ups", musclePartName: "BACK", usageCount: 60, maxWeight: 0, lastPerformance: "BW x 12"),
-        Exercise(name: "Bent Over Rows", musclePartName: "BACK", usageCount: 20, maxWeight: 90, lastPerformance: "70 KG x 10"),
-        Exercise(name: "Squats", musclePartName: "LEGS", usageCount: 80, maxWeight: 140, lastPerformance: "120 KG x 6", previousSets: [
-            WorkoutSet(setNumber: 1, reps: 8, weight: 100),
-            WorkoutSet(setNumber: 2, reps: 6, weight: 120)
-        ]),
-        Exercise(name: "Leg Press", musclePartName: "LEGS", usageCount: 15, maxWeight: 300, lastPerformance: "250 KG x 12"),
-        Exercise(name: "Lunges", musclePartName: "LEGS", usageCount: 10, maxWeight: 60, lastPerformance: "50 KG x 10"),
-        Exercise(name: "Overhead Press", musclePartName: "SHOULDERS", usageCount: 40, maxWeight: 60, lastPerformance: "50 KG x 8"),
-        Exercise(name: "Lateral Raises", musclePartName: "SHOULDERS", usageCount: 35, maxWeight: 15, lastPerformance: "12 KG x 12"),
-        Exercise(name: "Bicep Curls", musclePartName: "BICEPS", usageCount: 55, maxWeight: 25, lastPerformance: "20 KG x 10"),
-        Exercise(name: "Hammer Curls", musclePartName: "BICEPS", usageCount: 25, maxWeight: 20, lastPerformance: "18 KG x 12"),
-        Exercise(name: "Tricep Pushdowns", musclePartName: "TRICEPS", usageCount: 48, maxWeight: 45, lastPerformance: "35 KG x 12"),
-        Exercise(name: "Skull Crushers", musclePartName: "TRICEPS", usageCount: 12, maxWeight: 35, lastPerformance: "30 KG x 8"),
-        Exercise(name: "Plank", musclePartName: "ABS", usageCount: 70, maxWeight: 0, lastPerformance: "2min"),
-        Exercise(name: "Crunches", musclePartName: "ABS", usageCount: 40, maxWeight: 0, lastPerformance: "30 reps"),
-        Exercise(name: "Running", musclePartName: "CARDIO", usageCount: 100, maxWeight: 0, lastPerformance: "5km in 25min"),
-        Exercise(name: "Cycling", musclePartName: "CARDIO", usageCount: 20, maxWeight: 0, lastPerformance: "10km in 20min")
-    ]
+    @Published public var exerciseLibrary: [Exercise] = []
     
-    public func routineExercises(for date: Date) -> [(name: String, sets: [WorkoutSet])] {
+    private func loadInitialState() {
+        guard let ctx = modelContext else { return }
+        
+        let settingsFetch = FetchDescriptor<AppSettings>()
+        if let settings = try? ctx.fetch(settingsFetch).first {
+            // 1. Settings
+            self.weightUnit = WeightUnit(rawValue: settings.preferredWeightUnitString) ?? .kg
+            self.primaryColor = Color(hex: settings.primaryColorHex)
+            self.accentColor = Color(hex: settings.accentColorHex)
+            
+            // 2. Exercises Map
+            let exFetch = FetchDescriptor<ExerciseEntity>()
+            let dbExercises = (try? ctx.fetch(exFetch)) ?? []
+            let exDict = Dictionary(uniqueKeysWithValues: dbExercises.map { ($0.id, $0) })
+            
+            self.exerciseLibrary = dbExercises.map { ex in
+                Exercise(id: ex.id, name: ex.name, musclePartName: ex.musclePartName, isCustom: ex.isCustom, usageCount: 0, maxWeight: 0, lastPerformance: "-", previousSets: [])
+            }
+            
+            // 3. Routines
+            let routineFetch = FetchDescriptor<RoutineDayEntity>()
+            let dbRoutines = (try? ctx.fetch(routineFetch)) ?? []
+            var loadedRoutine: [Int: RoutineEntry] = [:]
+            for day in dbRoutines {
+                let muscles = day.selectedMusclePartNames.compactMap { mName in
+                    self.availableParts.first(where: { $0.name == mName })
+                }
+                let exercises: [(exercise: Exercise, sets: [WorkoutSet])] = day.plannedExercises.sorted(by: { $0.displayOrder < $1.displayOrder }).compactMap { pEx in
+                    guard let exEntity = dbExercises.first(where: { $0.id == pEx.exerciseId }) else { return nil }
+                    let exercise = Exercise(id: exEntity.id, name: exEntity.name, musclePartName: exEntity.musclePartName)
+                    let mappedSets = pEx.plannedSets.sorted(by: { $0.setNumber < $1.setNumber }).map { pSet in
+                        return WorkoutSet(setNumber: pSet.setNumber, reps: pSet.reps, weightKg: pSet.weightKg)
+                    }
+                    return (exercise: exercise, sets: mappedSets)
+                }
+                loadedRoutine[day.weekday] = RoutineEntry(muscles: muscles, exercises: exercises)
+            }
+            self.routine = loadedRoutine
+            
+            // 4. Sessions
+            let sessionFetch = FetchDescriptor<WorkoutSessionEntity>()
+            let dbSessions = (try? ctx.fetch(sessionFetch)) ?? []
+            var loadedSessions: [String: ActiveWorkoutSession] = [:]
+            for s in dbSessions {
+                let logs: [ExerciseLog] = s.exerciseLogs.sorted(by: { $0.displayOrder < $1.displayOrder }).map { log in
+                    let eName = exDict[log.exerciseId]?.name ?? log.snapshotExerciseName
+                    let mName = exDict[log.exerciseId]?.musclePartName ?? log.snapshotMusclePartName
+                    let baseEx = Exercise(id: log.exerciseId, name: eName, musclePartName: mName)
+                    let sets = log.sets.sorted(by: { $0.setNumber < $1.setNumber }).map { dbSet in
+                        return WorkoutSet(setNumber: dbSet.setNumber, reps: dbSet.reps, weightKg: dbSet.weightKg, isPR: dbSet.isPR)
+                    }
+                    return ExerciseLog(exercise: baseEx, sets: sets)
+                }
+                loadedSessions[s.dateKey] = ActiveWorkoutSession(
+                    date: s.sessionDate,
+                    exerciseLogs: logs,
+                    removedPlannedExercises: Set(s.removedPlannedExerciseIds.compactMap { exDict[$0]?.name }),
+                    isFinished: s.isFinished
+                )
+            }
+            self.sessions = loadedSessions
+            // 5. Body Zones
+            let zoneFetch = FetchDescriptor<BodyZoneEntity>()
+            let dbZones = (try? ctx.fetch(zoneFetch)) ?? []
+            self.bodyZones = dbZones.map { z in
+                BodyZone(id: z.id, muscleName: z.muscleName, normalizedX: z.normalizedX, normalizedY: z.normalizedY, side: PhotoSide(rawValue: z.sideRaw) ?? .front)
+            }
+            
+            // 6. Progression Photos
+            let photoFetch = FetchDescriptor<ProgressionPhotoEntity>()
+            let dbPhotos = (try? ctx.fetch(photoFetch)) ?? []
+            self.progressionPhotos = dbPhotos.map { p in
+                ProgressionPhoto(id: p.id, date: p.date, filename: p.filename, side: PhotoSide(rawValue: p.sideRaw) ?? .front)
+            }
+            
+        } else {
+            // FIRST LAUNCH SEED
+            seedDatabase()
+            loadInitialState() // Reload after seed
+        }
+    }
+    
+    private func seedDatabase() {
+        guard let ctx = modelContext else { return }
+        
+        let settings = AppSettings(preferredWeightUnitString: "KG", primaryColorHex: "#C4524D", accentColorHex: "#FF2D55", userName: "Abhi's")
+        ctx.insert(settings)
+        
+        let defaultExercises = [
+            ("Bench Press", "CHEST"),
+            ("Incline Dumbbell Press", "CHEST"),
+            ("Cable Flyes", "CHEST"),
+            ("Pull-ups", "BACK"),
+            ("Barbell Row", "BACK"),
+            ("Lat Pulldown", "BACK"),
+            ("Squats", "LEGS"),
+            ("Leg Press", "LEGS"),
+            ("Romanian Deadlift", "LEGS"),
+            ("Overhead Press", "SHOULDERS"),
+            ("Lateral Raises", "SHOULDERS"),
+            ("Dumbbell Curls", "BICEPS"),
+            ("Hammer Curls", "BICEPS"),
+            ("Tricep Pushdown", "TRICEPS"),
+            ("Overhead Tricep Extension", "TRICEPS"),
+            ("Crunches", "ABS"),
+            ("Plank", "ABS"),
+            ("Treadmill Running", "CARDIO")
+        ]
+        
+        var exEntities: [String: ExerciseEntity] = [:]
+        for ex in defaultExercises {
+            let entity = ExerciseEntity(id: UUID(), name: ex.0, musclePartName: ex.1, isCustom: false)
+            ctx.insert(entity)
+            exEntities[ex.0] = entity
+        }
+        
+        let routineSeedData = [
+            2: (["CHEST", "TRICEPS"], ["Bench Press", "Incline Dumbbell Press", "Tricep Pushdown", "Overhead Tricep Extension"]), // Monday
+            3: (["BACK", "BICEPS"], ["Pull-ups", "Barbell Row", "Lat Pulldown", "Dumbbell Curls"]), // Tuesday
+            4: (["LEGS", "SHOULDERS", "ABS"], ["Squats", "Leg Press", "Overhead Press", "Lateral Raises", "Crunches"]) // Wednesday
+        ]
+        
+        for (day, data) in routineSeedData {
+            let rd = RoutineDayEntity(id: UUID(), weekday: day, selectedMusclePartNames: data.0)
+            for (i, exName) in data.1.enumerated() {
+                if let exEntity = exEntities[exName] {
+                    let pe = PlannedExerciseEntity(id: UUID(), exerciseId: exEntity.id, displayOrder: i)
+                    for setNum in 1...3 {
+                        let pse = PlannedSetEntity(id: UUID(), setNumber: setNum, reps: 10, weightKg: 0)
+                        pe.plannedSets.append(pse)
+                    }
+                    rd.plannedExercises.append(pe)
+                }
+            }
+            ctx.insert(rd)
+        }
+        
+        try? ctx.save()
+    }
+    
+    public func addCustomExercise(name: String, musclePartName: String) {
+        let ex = Exercise(name: name, musclePartName: musclePartName, isCustom: true)
+        exerciseLibrary.append(ex)
+        
+        if let ctx = modelContext {
+            let entity = ExerciseEntity(id: ex.id, name: ex.name, musclePartName: ex.musclePartName, isCustom: true)
+            ctx.insert(entity)
+            try? ctx.save()
+        }
+    }
+    
+    public func session(for date: Date) -> ActiveWorkoutSession? {
+        return sessions[dateKey(date)]
+    }
+    
+    public func saveSession(_ session: ActiveWorkoutSession, for date: Date) {
+        sessions[dateKey(date)] = session
+        
+        guard let ctx = modelContext else { return }
+        let dKey = dateKey(date)
+        
+        let sessionFetch = FetchDescriptor<WorkoutSessionEntity>(predicate: #Predicate { $0.dateKey == dKey })
+        if let existing = try? ctx.fetch(sessionFetch).first {
+            ctx.delete(existing)
+        }
+        
+        let exFetch = FetchDescriptor<ExerciseEntity>()
+        let dbExercises = (try? ctx.fetch(exFetch)) ?? []
+        let exDict = Dictionary(uniqueKeysWithValues: dbExercises.map { ($0.name, $0) })
+        
+        let removedIds = session.removedPlannedExercises.compactMap { name in
+            exDict[name]?.id
+        }
+        
+        let entity = WorkoutSessionEntity(id: session.id, dateKey: dKey, sessionDate: session.date, isFinished: session.isFinished)
+        entity.removedPlannedExerciseIds = removedIds
+        
+        for (i, log) in session.exerciseLogs.enumerated() {
+            let exEntityId = log.exercise.id
+            
+            let logEntity = ExerciseLogEntity(id: log.id, exerciseId: exEntityId, snapshotExerciseName: log.exercise.name, snapshotMusclePartName: log.exercise.musclePartName, displayOrder: i)
+            for storedSet in log.sets {
+                let setEntity = WorkoutSetEntity(id: storedSet.id, setNumber: storedSet.setNumber, reps: storedSet.reps, weightKg: storedSet.weightKg, isPR: storedSet.isPR)
+                logEntity.sets.append(setEntity)
+            }
+            
+            entity.exerciseLogs.append(logEntity)
+        }
+        
+        ctx.insert(entity)
+        try? ctx.save()
+    }
+    
+    public func deleteExerciseLog(name: String, for date: Date) {
+        if var current = session(for: date) {
+            current.exerciseLogs.removeAll(where: { $0.exercise.name == name })
+            current.removedPlannedExercises.insert(name)
+            saveSession(current, for: date)
+        }
+    }
+    
+    public func deleteWorkoutSet(exerciseId: UUID, setId: UUID, for date: Date) {
+        if var current = session(for: date),
+           let idx = current.exerciseLogs.firstIndex(where: { $0.exercise.id == exerciseId }) {
+            current.exerciseLogs[idx].sets.removeAll(where: { $0.id == setId })
+            for i in 0..<current.exerciseLogs[idx].sets.count {
+                current.exerciseLogs[idx].sets[i].setNumber = i + 1
+            }
+            saveSession(current, for: date)
+        }
+    }
+    
+    public func saveRoutineDay(dayId: Int, muscles: [MusclePart]) {
+        // Phase 5: Enforce consistency by auto-generating exercises for chosen muscles
+        var selectedExercises: [(exercise: Exercise, sets: [WorkoutSet])] = []
+        for muscle in muscles {
+            // Pick a default exercise for this muscle group from library
+            if let defaultEx = exerciseLibrary.first(where: { $0.musclePartName == muscle.name }) {
+                // Default 3 sets of 10
+                let sets = [
+                    WorkoutSet(setNumber: 1, reps: 10, weightKg: 0),
+                    WorkoutSet(setNumber: 2, reps: 10, weightKg: 0),
+                    WorkoutSet(setNumber: 3, reps: 10, weightKg: 0)
+                ]
+                selectedExercises.append((exercise: defaultEx, sets: sets))
+            }
+        }
+        
+        let entry = RoutineEntry(muscles: muscles, exercises: selectedExercises)
+        routine[dayId] = entry
+        
+        guard let ctx = modelContext else { return }
+        let fetch = FetchDescriptor<RoutineDayEntity>(predicate: #Predicate { $0.weekday == dayId })
+        if let existing = try? ctx.fetch(fetch).first {
+            ctx.delete(existing)
+        }
+        
+        let entity = RoutineDayEntity(id: UUID(), weekday: dayId, selectedMusclePartNames: muscles.map { $0.name })
+        
+        let exFetch = FetchDescriptor<ExerciseEntity>()
+        let dbExercises = (try? ctx.fetch(exFetch)) ?? []
+        let exDict = Dictionary(uniqueKeysWithValues: dbExercises.map { ($0.name, $0) })
+        
+        for (i, ex) in selectedExercises.enumerated() {
+            let exId = ex.exercise.id
+            let pEx = PlannedExerciseEntity(id: UUID(), exerciseId: exId, displayOrder: i)
+            for pSet in ex.sets {
+                let pSetEntity = PlannedSetEntity(id: UUID(), setNumber: pSet.setNumber, reps: pSet.reps, weightKg: pSet.weightKg)
+                pEx.plannedSets.append(pSetEntity)
+            }
+            entity.plannedExercises.append(pEx)
+        }
+        
+        ctx.insert(entity)
+        try? ctx.save()
+    }
+    
+    public func dateKey(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+    
+    public func routineExercises(for date: Date) -> [(exercise: Exercise, sets: [WorkoutSet])] {
         let calendar = Calendar.current
         let weekday = calendar.component(.weekday, from: date)
         return routine[weekday]?.exercises ?? []
     }
     
-    public init() {}
+
     
     public func parts(for date: Date) -> [MusclePart] {
         let calendar = Calendar.current
@@ -271,9 +438,40 @@ public class WorkoutDataManager: ObservableObject {
         let sortedSessions = sessions.values.sorted { $0.date < $1.date }
         for session in sortedSessions {
             if let log = session.exerciseLogs.first(where: { $0.exercise.name == exerciseName }) {
-                let volume = log.sets.reduce(0.0) { $0 + ($1.weight * Double($1.reps)) }
-                let maxW = log.sets.map { $0.weight }.max() ?? 0.0
+                let volume = log.sets.reduce(0.0) { $0 + ($1.weightKg * Double($1.reps)) }
+                let maxW = log.sets.map { $0.weightKg }.max() ?? 0.0
                 results.append((date: session.date, volume: volume, maxWeight: maxW))
+            }
+        }
+        return results
+    }
+    
+    public func workoutVolume(for date: Date) -> Double {
+        let key = dateKey(date)
+        guard let session = sessions[key] else { return 0.0 }
+        return session.exerciseLogs.reduce(0.0) { logSum, log in
+            logSum + log.sets.reduce(0.0) { setSum, set in
+                setSum + (set.weightKg * Double(set.reps))
+            }
+        }
+    }
+    
+    public func activityLevel(for date: Date) -> Int {
+        let volume = workoutVolume(for: date)
+        if volume == 0 { return 0 }
+        if volume < 1000 { return 1 }
+        if volume < 3000 { return 2 }
+        if volume < 6000 { return 3 }
+        return 4
+    }
+    
+    public func yearlyActivity(for year: Int) -> [String: Int] {
+        var results: [String: Int] = [:]
+        for (dateKey, session) in sessions {
+            let calendar = Calendar.current
+            let sessionYear = calendar.component(.year, from: session.date)
+            if sessionYear == year {
+                results[dateKey] = activityLevel(for: session.date)
             }
         }
         return results
@@ -316,8 +514,17 @@ public class WorkoutDataManager: ObservableObject {
         if let data = image.jpegData(compressionQuality: 0.85) {
             try? data.write(to: url)
         }
-        let entry = ProgressionPhoto(date: Date(), filename: filename, side: side)
+        let id = UUID()
+        let date = Date()
+        let entry = ProgressionPhoto(id: id, date: date, filename: filename, side: side)
         progressionPhotos.append(entry)
+        
+        // Persist to SwiftData
+        if let ctx = modelContext {
+            let entity = ProgressionPhotoEntity(id: id, date: date, filename: filename, sideRaw: side.rawValue)
+            ctx.insert(entity)
+            try? ctx.save()
+        }
     }
     
     public func loadImage(filename: String) -> UIImage? {
@@ -330,6 +537,15 @@ public class WorkoutDataManager: ObservableObject {
         let url = progressionDirectory.appendingPathComponent(photo.filename)
         try? FileManager.default.removeItem(at: url)
         progressionPhotos.removeAll { $0.id == photo.id }
+        
+        if let ctx = modelContext {
+            let photoId = photo.id
+            let fetch = FetchDescriptor<ProgressionPhotoEntity>(predicate: #Predicate { $0.id == photoId })
+            if let entity = try? ctx.fetch(fetch).first {
+                ctx.delete(entity)
+                try? ctx.save()
+            }
+        }
     }
     
     // Latest photo for a given side
@@ -342,12 +558,31 @@ public class WorkoutDataManager: ObservableObject {
     }
     
     public func addZone(_ zone: BodyZone) {
-        // Remove any existing zone for same muscle+side
         bodyZones.removeAll { $0.muscleName == zone.muscleName && $0.side == zone.side }
         bodyZones.append(zone)
+        
+        if let ctx = modelContext {
+            let mName = zone.muscleName
+            let sRaw = zone.side.rawValue
+            let fetch = FetchDescriptor<BodyZoneEntity>(predicate: #Predicate { $0.muscleName == mName && $0.sideRaw == sRaw })
+            if let existing = try? ctx.fetch(fetch).first {
+                ctx.delete(existing)
+            }
+            
+            let entity = BodyZoneEntity(id: zone.id, muscleName: zone.muscleName, normalizedX: zone.normalizedX, normalizedY: zone.normalizedY, sideRaw: zone.side.rawValue)
+            ctx.insert(entity)
+            try? ctx.save()
+        }
     }
     
     public func removeZone(id: UUID) {
         bodyZones.removeAll { $0.id == id }
+        if let ctx = modelContext {
+            let fetch = FetchDescriptor<BodyZoneEntity>(predicate: #Predicate { $0.id == id })
+            if let existing = try? ctx.fetch(fetch).first {
+                ctx.delete(existing)
+                try? ctx.save()
+            }
+        }
     }
 }

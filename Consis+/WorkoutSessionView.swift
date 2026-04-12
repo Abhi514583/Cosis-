@@ -40,6 +40,10 @@ public struct WorkoutSessionView: View {
                     sessionDate: sessionDate,
                     onAddExercise: { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { phase = .selection } },
                     onFinish: {
+                        if var session = dataManager.session(for: sessionDate) {
+                            session.isFinished = true
+                            dataManager.saveSession(session, for: sessionDate)
+                        }
                         dismiss()
                     },
                     onResumeExercise: { ex in 
@@ -52,7 +56,7 @@ public struct WorkoutSessionView: View {
                     onSelect: { ex in 
                         var resolvedEx = ex
                         let routine = dataManager.routineExercises(for: sessionDate)
-                        if let plan = routine.first(where: { $0.name == ex.name }) {
+                        if let plan = routine.first(where: { $0.exercise.id == ex.id }) {
                             resolvedEx.previousSets = plan.sets
                         }
                         
@@ -117,20 +121,20 @@ struct ActiveWorkoutOverviewView: View {
                 let session = dataManager.session(for: sessionDate) ?? ActiveWorkoutSession(date: sessionDate, exerciseLogs: [])
                 
                 // Merge routine with actual logs
-                let displayItems: [(name: String, sets: [WorkoutSet], isLogged: Bool, unit: WeightUnit)] = {
-                    var items: [(name: String, sets: [WorkoutSet], isLogged: Bool, unit: WeightUnit)] = []
+                let displayItems: [(name: String, sets: [WorkoutSet], isLogged: Bool)] = {
+                    var items: [(name: String, sets: [WorkoutSet], isLogged: Bool)] = []
                     var loggedNames = Set<String>()
                     
                     // First, add all logged exercises
                     for log in session.exerciseLogs {
-                        items.append((name: log.exercise.name, sets: log.sets, isLogged: true, unit: log.unit))
+                        items.append((name: log.exercise.name, sets: log.sets, isLogged: true))
                         loggedNames.insert(log.exercise.name)
                     }
                     
                     // Then add planned exercises from routine (ignoring removed ones)
                     for plan in routine {
-                        if !loggedNames.contains(plan.name) && !session.removedPlannedExercises.contains(plan.name) {
-                            items.append((name: plan.name, sets: plan.sets, isLogged: false, unit: .kg))
+                        if !loggedNames.contains(plan.exercise.name) && !session.removedPlannedExercises.contains(plan.exercise.name) {
+                            items.append((name: plan.exercise.name, sets: plan.sets, isLogged: false))
                         }
                     }
                     return items
@@ -138,7 +142,7 @@ struct ActiveWorkoutOverviewView: View {
                 
                 if !displayItems.isEmpty {
                     ForEach(displayItems, id: \.name) { item in
-                        PaintedLogCard(name: item.name, sets: item.sets, isLogged: item.isLogged, originalUnit: item.unit)
+                        PaintedLogCard(name: item.name, sets: item.sets, isLogged: item.isLogged)
                             .contentShape(Rectangle()) // Make the whole area tappable
                             .onTapGesture {
                                 // Resolve exercise from library or create fallback
@@ -220,7 +224,6 @@ struct PaintedLogCard: View {
     let name: String
     let sets: [WorkoutSet]
     let isLogged: Bool
-    let originalUnit: WeightUnit // The unit these sets were originally logged in
     @EnvironmentObject var dataManager: WorkoutDataManager
     
     var body: some View {
@@ -245,7 +248,7 @@ struct PaintedLogCard: View {
                             Text("\(s.setNumber)").font(.system(size: 12, weight: .black)).foregroundColor(.white.opacity(0.5)).frame(width: 30, alignment: .leading)
                             
                             // Convert to global unit
-                            let convertedW = dataManager.weightUnit.convert(s.weight, from: originalUnit)
+                            let convertedW = dataManager.weightUnit.convert(s.weightKg, from: .kg)
                             Text("\(String(format: "%.1f", convertedW).replacingOccurrences(of: ".0", with: "")) \(dataManager.weightUnit.rawValue)").font(.system(size: 14, weight: .bold)).foregroundColor(.white.opacity(isLogged ? 1.0 : 0.4))
                             
                             Spacer()
@@ -384,8 +387,7 @@ struct CreateCustomExerciseSheet: View {
             
             Button(action: {
                 let m = selectedMuscle?.name ?? "CUSTOM"
-                let ex = Exercise(name: rawName, musclePartName: m)
-                dataManager.exerciseLibrary.append(ex)
+                dataManager.addCustomExercise(name: rawName, musclePartName: m)
                 dismiss()
             }) {
                 Text("CREATE & ADD TO LIBRARY")
@@ -483,8 +485,7 @@ struct TableLoggerView: View {
                         
                         HStack {
                             // Convert maxWeight to CURRENT unit for display
-                            let displayedMax = dataManager.weightUnit.convert(exercise.maxWeight, from: .kg) // Assuming library stores in KG
-                            SuggestionPill(baseWeight: displayedMax, baseReps: exercise.previousSets.first?.reps ?? 10) { suggestedWeight, suggestedReps in
+                            SuggestionPill(baseWeightKg: exercise.maxWeight, baseReps: exercise.previousSets.first?.reps ?? 10) { suggestedWeight, suggestedReps in
                                 weightInput = String(format: "%.1f", suggestedWeight).replacingOccurrences(of: ".0", with: "")
                                 repsInput = "\(suggestedReps)"
                                 
@@ -519,8 +520,8 @@ struct TableLoggerView: View {
                                     // Simulated Previous based on historical data array
                                     let prevStr = previousDataString(for: s.setNumber)
                                     Text(prevStr).frame(maxWidth: .infinity, alignment: .center).font(.system(size: 14, weight: .bold)).foregroundColor(.gray.opacity(0.5))
-                                    // Convert logged weight to CURRENT unit display
-                                    let convertedWeight = dataManager.weightUnit.convert(s.weight, from: log.unit)
+                                    // Convert logged canonical kg to display unit
+                                    let convertedWeight = dataManager.weightUnit.convert(s.weightKg, from: .kg)
                                     Text("\(String(format: "%.1f", convertedWeight).replacingOccurrences(of: ".0", with: ""))")
                                         .frame(width: 80, height: 36, alignment: .center).font(.system(size: 16, weight: .bold)).background(Theme.Colors.surfaceContainerLow).clipShape(RoundedRectangle(cornerRadius: 10)).foregroundColor(.white)
                                     Text("\(s.reps)")
@@ -534,7 +535,7 @@ struct TableLoggerView: View {
                                     generator.impactOccurred()
                                     withAnimation {
                                         editingSetId = s.id
-                                        weightInput = String(format: "%.1f", dataManager.weightUnit.convert(s.weight, from: log.unit)).replacingOccurrences(of: ".0", with: "")
+                                        weightInput = String(format: "%.1f", dataManager.weightUnit.convert(s.weightKg, from: .kg)).replacingOccurrences(of: ".0", with: "")
                                         repsInput = "\(s.reps)"
                                         focusedField = .weight
                                     }
@@ -569,8 +570,8 @@ struct TableLoggerView: View {
                                 .onTapGesture {
                                     if nextSetNum <= exercise.previousSets.count {
                                         let pSet = exercise.previousSets[nextSetNum - 1]
-                                        // Convert from KG (library) to current unit
-                                        let convertedW = dataManager.weightUnit.convert(pSet.weight, from: .kg)
+                                        // Convert from canonical KG to display unit
+                                        let convertedW = dataManager.weightUnit.convert(pSet.weightKg, from: .kg)
                                         weightInput = String(format: "%.1f", convertedW).replacingOccurrences(of: ".0", with: "")
                                         repsInput = "\(pSet.reps)"
                                         
@@ -695,8 +696,8 @@ struct TableLoggerView: View {
     private func previousDataString(for setNum: Int) -> String {
         if setNum - 1 < exercise.previousSets.count {
             let pSet = exercise.previousSets[setNum - 1]
-            // Convert historical weight to CURRENT unit display
-            let convertedW = dataManager.weightUnit.convert(pSet.weight, from: .kg) // Assuming library stores base as KG
+            // Convert canonical KG to CURRENT unit display
+            let convertedW = dataManager.weightUnit.convert(pSet.weightKg, from: .kg)
             return "\(String(format: "%.1f", convertedW).replacingOccurrences(of: ".0", with: "")) × \(pSet.reps)"
         }
         return "-"
@@ -719,17 +720,20 @@ struct TableLoggerView: View {
         
         if let idx = currentSession.exerciseLogs.firstIndex(where: { $0.exercise.id == exercise.id }) {
             if let editId = editingSetId, let sIdx = currentSession.exerciseLogs[idx].sets.firstIndex(where: { $0.id == editId }) {
-                // Update existing set
-                currentSession.exerciseLogs[idx].sets[sIdx].weight = w
+                // Update existing set with Canonical KG
+                let kgW = WeightUnit.kg.convert(w, from: dataManager.weightUnit)
+                currentSession.exerciseLogs[idx].sets[sIdx].weightKg = kgW
                 currentSession.exerciseLogs[idx].sets[sIdx].reps = r
                 editingSetId = nil
             } else {
-                // Add new set
+                // Add new set with Canonical KG
                 let n = (currentSession.exerciseLogs[idx].sets.last?.setNumber ?? 0) + 1
-                currentSession.exerciseLogs[idx].sets.append(WorkoutSet(setNumber: n, reps: r, weight: w))
+                let kgW = WeightUnit.kg.convert(w, from: dataManager.weightUnit)
+                currentSession.exerciseLogs[idx].sets.append(WorkoutSet(setNumber: n, reps: r, weightKg: kgW))
             }
         } else {
-            currentSession.exerciseLogs.append(ExerciseLog(exercise: exercise, sets: [WorkoutSet(setNumber: 1, reps: r, weight: w)], unit: dataManager.weightUnit))
+            let kgW = WeightUnit.kg.convert(w, from: dataManager.weightUnit)
+            currentSession.exerciseLogs.append(ExerciseLog(exercise: exercise, sets: [WorkoutSet(setNumber: 1, reps: r, weightKg: kgW)]))
         }
         
         dataManager.saveSession(currentSession, for: sessionDate)

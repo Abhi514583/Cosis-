@@ -45,7 +45,8 @@ struct ExerciseHistorySheet: View {
                         Text("ALL-TIME PR")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundColor(.gray)
-                        Text("\(String(format: "%.1f", maxW)) \(dataManager.weightUnit.rawValue)")
+                        let convertedMax = dataManager.weightUnit.convert(maxW, from: .kg)
+                        Text("\(String(format: "%.1f", convertedMax)) \(dataManager.weightUnit.rawValue)")
                             .font(.system(size: 18, weight: .black, design: .rounded))
                             .foregroundColor(dataManager.primaryColor)
                     }
@@ -89,7 +90,8 @@ struct ExerciseHistorySheet: View {
                 // Line Chart
                 Chart {
                     ForEach(history, id: \.date) { item in
-                        let yVal = metricMode == .maxWeight ? item.maxWeight : item.volume
+                        let rawYVal = metricMode == .maxWeight ? item.maxWeight : item.volume
+                        let yVal = dataManager.weightUnit.convert(rawYVal, from: .kg)
                         LineMark(
                             x: .value("Date", item.date),
                             y: .value(metricMode.rawValue, yVal)
@@ -145,10 +147,12 @@ struct ExerciseHistorySheet: View {
                             }
                             Spacer()
                             VStack(alignment: .trailing, spacing: 2) {
-                                Text("\(String(format: "%.1f", item.maxWeight)) \(dataManager.weightUnit.rawValue)")
-                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                let cMax = dataManager.weightUnit.convert(item.maxWeight, from: .kg)
+                                let cVol = dataManager.weightUnit.convert(item.volume, from: .kg)
+                                Text("\(String(format: "%.1f", cMax)) \(dataManager.weightUnit.rawValue)")
+                                    .font(.system(size: 14, weight: .bold))
                                     .foregroundColor(.white)
-                                Text("Vol \(Int(item.volume)) \(dataManager.weightUnit.rawValue)")
+                                Text("Vol \(Int(cVol)) \(dataManager.weightUnit.rawValue)")
                                     .font(.system(size: 10))
                                     .foregroundColor(.gray)
                             }

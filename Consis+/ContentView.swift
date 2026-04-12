@@ -2,13 +2,14 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    @StateObject private var dataManager = WorkoutDataManager()
+    @EnvironmentObject private var dataManager: WorkoutDataManager
     @State private var selectedTab = 0
     @State private var isPlusMenuOpen = false
     @State private var selectedDate = Date()
     @State private var isBuildingRoutine = false
     @State private var isStartingWorkout = false
     @State private var isSettingsOpen = false
+    @State private var isCalendarOpen = false
     @State private var initialExercise: Exercise? = nil
     
     var body: some View {
@@ -63,9 +64,8 @@ struct ContentView: View {
                 .zIndex(5)
             }
             
-            BottomFloatingNav(selectedTab: $selectedTab, isPlusMenuOpen: $isPlusMenuOpen, selectedDate: $selectedDate)
+            BottomFloatingNav(selectedTab: $selectedTab, isPlusMenuOpen: $isPlusMenuOpen, isCalendarOpen: $isCalendarOpen, selectedDate: $selectedDate)
         }
-        .environmentObject(dataManager)
         .fullScreenCover(isPresented: $isBuildingRoutine) {
             BuildRoutineView()
                 .environmentObject(dataManager)
@@ -79,6 +79,10 @@ struct ContentView: View {
         }
         .sheet(isPresented: $isSettingsOpen) {
             SettingsView()
+                .environmentObject(dataManager)
+        }
+        .fullScreenCover(isPresented: $isCalendarOpen) {
+            WorkoutCalendarView(selectedDate: $selectedDate)
                 .environmentObject(dataManager)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -113,4 +117,5 @@ struct PlusMenuItem: View {
 
 #Preview {
     ContentView()
+        .environmentObject(WorkoutDataManager(modelContext: nil))
 }

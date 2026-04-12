@@ -10,22 +10,37 @@ import SwiftData
 
 @main
 struct Consis_App: App {
-    var sharedModelContainer: ModelContainer = {
+    var sharedModelContainer: ModelContainer
+    @StateObject private var dataManager: WorkoutDataManager
+
+    init() {
         let schema = Schema([
-            Item.self,
+            AppSettings.self,
+            ExerciseEntity.self,
+            RoutineDayEntity.self,
+            PlannedExerciseEntity.self,
+            PlannedSetEntity.self,
+            WorkoutSessionEntity.self,
+            ExerciseLogEntity.self,
+            WorkoutSetEntity.self,
+            ProgressionPhotoEntity.self,
+            BodyZoneEntity.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            self.sharedModelContainer = container
+            self._dataManager = StateObject(wrappedValue: WorkoutDataManager(modelContext: container.mainContext))
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
-    }()
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(dataManager)
         }
         .modelContainer(sharedModelContainer)
     }

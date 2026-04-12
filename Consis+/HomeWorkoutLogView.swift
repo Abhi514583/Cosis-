@@ -213,14 +213,12 @@ struct DailyLogView: View {
         dataManager.parts(for: date)
     }
     
-    private var displayWorkouts: [(name: String, sets: [WorkoutSet], muscle: String)] {
-        var merged: [(name: String, sets: [WorkoutSet], muscle: String)] = []
-        
-        // Source standard ones from centralized routine
+    private var displayWorkouts: [(exercise: Exercise, sets: [WorkoutSet], muscle: String)] {
+        var merged: [(exercise: Exercise, sets: [WorkoutSet], muscle: String)] = []
         let routineExercises = dataManager.routineExercises(for: date)
-        for ex in routineExercises {
-            let muscle = dataManager.exerciseLibrary.first(where: { $0.name == ex.name })?.musclePartName ?? "OTHER"
-            merged.append((name: ex.name, sets: ex.sets, muscle: muscle))
+        for rx in routineExercises {
+            let muscle = dataManager.exerciseLibrary.first(where: { $0.id == rx.exercise.id })?.musclePartName ?? "OTHER"
+            merged.append((exercise: rx.exercise, sets: rx.sets, muscle: muscle))
         }
         
         if let session = dataManager.session(for: date) {
@@ -228,30 +226,29 @@ struct DailyLogView: View {
             
             // Override templated exercises with logged ones
             for i in 0..<merged.count {
-                if let activeLog = session.exerciseLogs.first(where: { $0.exercise.name == merged[i].name }) {
-                    merged[i].sets = activeLog.sets
-                    activeExerciseNames.insert(merged[i].name)
-                }
+                let activeLog = session.exerciseLogs.first(where: { $0.exercise.id == merged[i].exercise.id })
+                merged[i].sets = activeLog?.sets ?? merged[i].sets
+                activeExerciseNames.insert(merged[i].exercise.name)
             }
             
             // Add any extra exercises they logged outside the template
             for log in session.exerciseLogs {
                 if !activeExerciseNames.contains(log.exercise.name) && !session.removedPlannedExercises.contains(log.exercise.name) {
-                    merged.append((name: log.exercise.name, sets: log.sets, muscle: log.exercise.musclePartName))
+                    merged.append((exercise: log.exercise, sets: log.sets, muscle: log.exercise.musclePartName))
                 }
             }
             
             // Remove planned exercises that were explicitly deleted
-            merged.removeAll(where: { session.removedPlannedExercises.contains($0.name) && $0.sets.isEmpty })
+            merged.removeAll(where: { session.removedPlannedExercises.contains($0.exercise.name) && $0.sets.isEmpty })
         }
         return merged
     }
     
-    private var groupedWorkouts: [(muscle: String, exercises: [(name: String, sets: [WorkoutSet])])] {
+    private var groupedWorkouts: [(muscle: String, exercises: [(exercise: Exercise, sets: [WorkoutSet])])] {
         let all = displayWorkouts
         let keys = Array(Set(all.map { $0.muscle })).sorted()
         return keys.map { key in
-            let exercises = all.filter { $0.muscle == key }.map { (name: $0.name, sets: $0.sets) }
+            let exercises = all.filter { $0.muscle == key }.map { (exercise: $0.exercise, sets: $0.sets) }
             return (muscle: key, exercises: exercises)
         }
     }
@@ -269,7 +266,7 @@ struct DailyLogView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 16) {
-                if dailyMuscleParts.isEmpty {
+                if dailyMuscleParts.isEmpty && !isCompleted {
                     VStack(spacing: 12) {
                         Image(systemName: "cup.and.saucer.fill")
                             .font(.system(size: 48))
@@ -289,7 +286,9 @@ struct DailyLogView: View {
                                     Text(isCompleted ? "LOGGED" : "TODAY'S FOCUS")
                                         .technicalMicroCopy()
                                         .foregroundColor(cardAccentColor.opacity(0.8))
-                                    Text(dailyMuscleParts.map({ $0.name }).joined(separator: " & ").uppercased())
+                                    let muscleDisplay = dailyMuscleParts.isEmpty ? Array(Set(displayWorkouts.map { $0.muscle })).sorted().joined(separator: " & ") : dailyMuscleParts.map({ $0.name }).joined(separator: " & ")
+                                    
+                                    Text(muscleDisplay.uppercased())
                                         .font(.system(size: 32, weight: .black, design: .rounded))
                                         .foregroundColor(.white)
                                         .fixedSize(horizontal: false, vertical: true)
@@ -337,15 +336,15 @@ struct DailyLogView: View {
                                     }.padding(.horizontal, 24)
                                     
                                     VStack(spacing: 12) {
-                                        ForEach(group.exercises, id: \.name) { workout in
-                                            WorkoutLogCard(exerciseName: workout.name, sets: workout.sets)
+                                        ForEach(group.exercises, id: \.exercise.name) { workout in
+                                            WorkoutLogCard(exerciseName: workout.exercise.name, sets: workout.sets)
                                                 .contentShape(Rectangle())
                                                 .onTapGesture {
-                                                    let fallback = Exercise(name: workout.name, musclePartName: group.muscle)
-                                                    var resolvedEx = dataManager.exerciseLibrary.first(where: { $0.name == workout.name }) ?? fallback
+                                                    let fallback = Exercise(name: workout.exercise.name, musclePartName: group.muscle)
+                                                    var resolvedEx = dataManager.exerciseLibrary.first(where: { $0.id == workout.exercise.id }) ?? fallback
                                                     if !workout.sets.isEmpty {
                                                         resolvedEx.previousSets = workout.sets
-                                                        if let maxW = workout.sets.map({ $0.weight }).max(), resolvedEx.maxWeight == 0 {
+                                                        if let maxW = workout.sets.map({ $0.weightKg }).max(), resolvedEx.maxWeight == 0 {
                                                             resolvedEx.maxWeight = maxW
                                                         }
                                                     }

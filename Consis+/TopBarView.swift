@@ -16,16 +16,7 @@ public struct TopBarView: View {
             
             Spacer()
             
-            // Replaced notification with Settings icon
-            Button(action: {}) {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 20))
-                    .foregroundColor(Theme.Colors.onSurface)
-                    .frame(width: 44, height: 44)
-                    .background(Theme.Colors.surfaceContainerHigh)
-                    .clipShape(Circle())
-            }
-            
+
             Button(action: {}) {
                 Image(systemName: "person.crop.circle.fill")
                     .resizable()

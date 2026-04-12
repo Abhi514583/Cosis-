@@ -152,7 +152,7 @@ struct RoutineDayRow: View {
                     // Row Actions: Remove & Tick
                     HStack(spacing: 12) {
                         Button(action: {
-                            withAnimation { dataManager.routine[dayId] = RoutineEntry(muscles: [], exercises: []) }
+                            withAnimation { dataManager.saveRoutineDay(dayId: dayId, muscles: []) }
                         }) {
                             Image(systemName: "trash.fill")
                                 .font(.system(size: 16))
@@ -166,7 +166,7 @@ struct RoutineDayRow: View {
                             HStack {
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 18, weight: .bold))
-                                Text("SAVE CHANGES")
+                                 Text("SAVE CHANGES")
                                     .font(.system(size: 14, weight: .black, design: .rounded))
                             }
                             .foregroundColor(.black)
@@ -194,7 +194,7 @@ struct RoutineDayRow: View {
         } else {
             currentMuscles.append(part)
         }
-        dataManager.routine[dayId] = RoutineEntry(muscles: currentMuscles, exercises: entry.exercises)
+        dataManager.saveRoutineDay(dayId: dayId, muscles: currentMuscles)
         
         let generator = UISelectionFeedbackGenerator()
         generator.selectionChanged()
@@ -229,5 +229,5 @@ struct MuscleToggleItem: View {
 
 #Preview {
     BuildRoutineView()
-        .environmentObject(WorkoutDataManager())
+        .environmentObject(WorkoutDataManager(modelContext: nil))
 }
